@@ -108,6 +108,7 @@ class AudioEngine {
   private guideSource: AudioBufferSourceNode | null = null;
   private instrumentGainNode: GainNode | null = null;
   private guideGainNode: GainNode | null = null;
+  private vocalBusNode: GainNode | null = null;
   private instrumentBaseGain = 1;
   private guideBaseGain = 1;
 
@@ -192,9 +193,14 @@ class AudioEngine {
     this.micGainNode = this.audioContext.createGain();
     this.micGainNode.gain.value = dbToLinear(this.config.media.micMonitorGainDb ?? -6);
 
+    this.vocalBusNode?.disconnect();
+    this.vocalBusNode = this.audioContext.createGain();
+    this.vocalBusNode.gain.value = 1;
+
     this.streamSource.connect(this.workletNode);
     this.workletNode.connect(this.micGainNode);
-    this.micGainNode.connect(this.audioContext.destination);
+    this.micGainNode.connect(this.vocalBusNode);
+    this.vocalBusNode.connect(this.audioContext.destination);
   }
 
   private async loadModels() {
@@ -264,8 +270,9 @@ class AudioEngine {
       this.guideSource.loop = this.config.media.loop;
 
       this.guideGainNode = this.audioContext.createGain();
-      this.guideGainNode.gain.value = this.guideBaseGain;
-      this.guideSource.connect(this.guideGainNode).connect(this.audioContext.destination);
+      this.guideGainNode.gain.value = this.currentGain * this.guideBaseGain;
+      const guideSink: AudioNode = this.vocalBusNode ?? this.audioContext.destination;
+      this.guideSource.connect(this.guideGainNode).connect(guideSink);
       this.guideSource.start(0, normalizedGuideOffset);
     }
   }
@@ -584,9 +591,11 @@ class AudioEngine {
     this.workletNode?.disconnect();
     this.micGainNode?.disconnect();
     this.streamSource?.disconnect();
+    this.vocalBusNode?.disconnect();
     this.workletNode = null;
     this.micGainNode = null;
     this.streamSource = null;
+    this.vocalBusNode = null;
 
     void this.audioContext?.close().catch(() => undefined);
     this.audioContext = null;

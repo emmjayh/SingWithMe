@@ -476,7 +476,8 @@ class AudioEngine {
       await this.evaluatePitch(frame);
     }
 
-    this.updateConfidence();
+    const rms = this.calculateRms(block);
+    this.updateConfidence(rms);
 
     const gainDb = this.gate.update(this.lastConfidence);
     this.currentGain = dbToLinear(gainDb);
@@ -497,7 +498,6 @@ class AudioEngine {
       gainDb
     });
 
-    const rms = this.calculateRms(block);
     const outputRms = Math.min(1, Math.sqrt((rms * this.currentGain * this.guideBaseGain) ** 2 + this.instrumentBaseGain ** 2));
     store.setLevels(rms, outputRms);
     store.setConfidence(this.lastConfidence);
@@ -551,9 +551,17 @@ class AudioEngine {
     }
   }
 
-  private updateConfidence() {
+  private updateConfidence(rms?: number) {
     const weights = this.config.confidenceWeights;
-    const combined = weights.vad * this.lastVad + weights.pitch * this.lastPitch + weights.phraseAware * 0;
+    let combined = weights.vad * this.lastVad + weights.pitch * this.lastPitch + weights.phraseAware * 0;
+
+    combined = Math.max(combined, this.lastVad);
+
+    if (typeof rms === "number") {
+      const energyConfidence = Math.min(1, rms / 0.05);
+      combined = Math.max(combined, energyConfidence);
+    }
+
     this.lastConfidence = Math.min(1, Math.max(0, combined));
   }
 

@@ -3,6 +3,7 @@ import { ManualMode, useAppStore, CalibrationStage, PlaybackState } from "@state
 import { ConfidenceGate, GateConfig, dbToLinear } from "./confidenceGate";
 import { Calibrator } from "./calibrator";
 import { TelemetryLog } from "./telemetry";
+import { PitchShifter } from "soundtouchjs";
 import { shallow } from "zustand/shallow";
 
 const AUDIO_WORKLET_URL = "/worklets/confidence-gate.worklet.js";
@@ -11,6 +12,11 @@ const VAD_FRAME_SOURCE = 480; // 10 ms @ 48 kHz
 const VAD_FRAME_TARGET = 160; // 10 ms @ 16 kHz
 const PITCH_FRAME_SOURCE = 3072; // 64 ms @ 48 kHz
 const PITCH_FRAME_TARGET = 1024; // 64 ms @ 16 kHz
+
+const CREPE_CENTS_MAPPING = new Float32Array(360);
+for (let i = 0; i < CREPE_CENTS_MAPPING.length; i += 1) {
+  CREPE_CENTS_MAPPING[i] = 1997.3794084376191 + (7180 / 359) * i;
+}
 
 interface MediaConfig {
   instrumentUrl: string | null;
@@ -109,6 +115,8 @@ class AudioEngine {
   private instrumentGainNode: GainNode | null = null;
   private guideGainNode: GainNode | null = null;
   private vocalBusNode: GainNode | null = null;
+  private guidePitchShifter: PitchShifter | null = null;
+  private guidePitchNode: AudioNode | null = null;
   private instrumentBaseGain = 1;
   private guideBaseGain = 1;
 
@@ -117,9 +125,14 @@ class AudioEngine {
 
   private lastVad = 0;
   private lastPitch = 0;
+  private lastPitchHz = 0;
   private lastConfidence = 0;
   private currentGain = 1;
   private calibrating = false;
+  private guidePitchTrack: Float32Array = new Float32Array();
+  private guidePitchConfidenceTrack: Float32Array = new Float32Array();
+  private guidePitchAnalysisToken = 0;
+  private currentPitchRatio = 1;
 
   async initialise() {
     if (this.initialised) return;
@@ -215,6 +228,10 @@ class AudioEngine {
       executionProviders: ["wasm"],
       graphOptimizationLevel: "all"
     });
+
+    if (this.guideBuffer) {
+      await this.analyzeGuidePitch();
+    }
   }
 
   private async loadMedia() {
@@ -242,6 +259,129 @@ class AudioEngine {
 
     this.instrumentBuffer = await fetchBuffer(instrumentUrl);
     this.guideBuffer = await fetchBuffer(guideUrl);
+
+    if (this.pitchSession && this.guideBuffer) {
+      await this.analyzeGuidePitch();
+    } else {
+      this.resetGuidePitchTrack();
+    }
+  }
+
+  private resetGuidePitchTrack() {
+    this.guidePitchTrack = new Float32Array();
+    this.guidePitchConfidenceTrack = new Float32Array();
+  }
+
+  private async analyzeGuidePitch() {
+    if (!this.guideBuffer || !this.pitchSession) {
+      this.resetGuidePitchTrack();
+      return;
+    }
+
+    const token = ++this.guidePitchAnalysisToken;
+    const channelCount = this.guideBuffer.numberOfChannels;
+    const totalSamples = this.guideBuffer.length;
+    const hopSamples = this.config.bufferSamples;
+
+    if (totalSamples <= 0 || channelCount <= 0) {
+      this.resetGuidePitchTrack();
+      return;
+    }
+
+    const effectiveLength = Math.max(totalSamples, PITCH_FRAME_SOURCE);
+    const frameCount = Math.max(
+      1,
+      Math.ceil((effectiveLength - PITCH_FRAME_SOURCE) / hopSamples) + 1
+    );
+
+    const track = new Float32Array(frameCount);
+    const confidenceTrack = new Float32Array(frameCount);
+    const channelData: Float32Array[] = [];
+    for (let channel = 0; channel < channelCount; channel += 1) {
+      channelData.push(this.guideBuffer.getChannelData(channel));
+    }
+
+    const frame = new Float32Array(PITCH_FRAME_SOURCE);
+
+    for (let frameIndex = 0; frameIndex < frameCount; frameIndex += 1) {
+      const start = frameIndex * hopSamples;
+      for (let i = 0; i < PITCH_FRAME_SOURCE; i += 1) {
+        const sampleIndex = start + i;
+        if (sampleIndex < totalSamples) {
+          let sample = 0;
+          for (let channel = 0; channel < channelCount; channel += 1) {
+            sample += channelData[channel][sampleIndex];
+          }
+          frame[i] = sample / channelCount;
+        } else {
+          frame[i] = 0;
+        }
+      }
+
+      const downsampled = this.downsampleFrame(frame, PITCH_FRAME_TARGET);
+      const result = await this.inferPitch(downsampled);
+
+      if (token !== this.guidePitchAnalysisToken) {
+        return;
+      }
+
+      track[frameIndex] = result?.frequency ?? 0;
+      confidenceTrack[frameIndex] = result?.confidence ?? 0;
+    }
+
+    if (token !== this.guidePitchAnalysisToken) {
+      return;
+    }
+
+    this.guidePitchTrack = track;
+    this.guidePitchConfidenceTrack = confidenceTrack;
+  }
+
+  private guidePitchAtTime(timeSeconds: number) {
+    const info = this.guidePitchFrameAtTime(timeSeconds);
+    return info.frequency;
+  }
+
+  private guidePitchFrameAtTime(timeSeconds: number) {
+    if (!this.guideBuffer || this.guidePitchTrack.length === 0) {
+      return { frequency: 0, confidence: 0 };
+    }
+
+    const hopSeconds = this.config.bufferSamples / this.config.sampleRate;
+    if (hopSeconds <= 0) {
+      return { frequency: 0, confidence: 0 };
+    }
+
+    const loopDuration = this.guideBuffer.duration;
+    let normalizedTime = timeSeconds;
+
+    if (this.config.media.loop && loopDuration > 0) {
+      normalizedTime = ((normalizedTime % loopDuration) + loopDuration) % loopDuration;
+    } else {
+      normalizedTime = Math.max(0, Math.min(loopDuration, normalizedTime));
+    }
+
+    const frameIndex = Math.min(
+      this.guidePitchTrack.length - 1,
+      Math.max(0, Math.floor(normalizedTime / hopSeconds))
+    );
+
+    return {
+      frequency: this.guidePitchTrack[frameIndex] ?? 0,
+      confidence: this.guidePitchConfidenceTrack[frameIndex] ?? 0
+    };
+  }
+
+  private getPlaybackPositionSeconds() {
+    if (!this.audioContext) {
+      return 0;
+    }
+
+    if (this.currentPlaybackState === "playing") {
+      return Math.max(0, this.audioContext.currentTime - this.playbackStartTime);
+    }
+
+    return this.playbackOffset;
   }
 
   private startMedia(offsetSeconds = 0) {
@@ -268,15 +408,33 @@ class AudioEngine {
     }
 
     if (this.guideBuffer) {
-      this.guideSource = this.audioContext.createBufferSource();
-      this.guideSource.buffer = this.guideBuffer;
-      this.guideSource.loop = this.config.media.loop;
+      const handleGuideEnd = () => {
+        if (this.config.media.loop) {
+          if (this.guidePitchShifter) {
+            this.guidePitchShifter.percentagePlayed = 0;
+          }
+        } else {
+          this.stop();
+        }
+      };
+
+      this.guidePitchShifter = new PitchShifter(this.audioContext, this.guideBuffer, undefined, handleGuideEnd);
+      const guideNode = this.guidePitchShifter.node;
+      this.guidePitchNode = guideNode;
+      this.currentPitchRatio = 1;
+      this.guidePitchShifter.pitch = this.currentPitchRatio;
+      this.guidePitchShifter.rate = 1;
+      this.guidePitchShifter.tempo = 1;
+
+      if (guideDuration > 0) {
+        const normalized = Math.max(0, Math.min(1, normalizedGuideOffset / guideDuration));
+        this.guidePitchShifter.percentagePlayed = normalized;
+      }
 
       this.guideGainNode = this.audioContext.createGain();
       this.guideGainNode.gain.value = this.currentGain * this.guideBaseGain;
       const guideSink: AudioNode = this.vocalBusNode ?? this.audioContext.destination;
-      this.guideSource.connect(this.guideGainNode).connect(guideSink);
-      this.guideSource.start(0, normalizedGuideOffset);
+      guideNode.connect(this.guideGainNode).connect(guideSink);
     }
   }
 
@@ -295,19 +453,17 @@ class AudioEngine {
       this.instrumentGainNode = null;
     }
 
-    if (this.guideSource) {
-      try {
-        this.guideSource.stop();
-      } catch {
-        /* ignore */
-      }
-      this.guideSource.disconnect();
-      this.guideSource = null;
-    }
     if (this.guideGainNode) {
       this.guideGainNode.disconnect();
       this.guideGainNode = null;
     }
+    if (this.guidePitchNode) {
+      this.guidePitchNode.disconnect();
+      this.guidePitchNode = null;
+    }
+    this.guidePitchShifter = null;
+    this.guideSource = null;
+    this.currentPitchRatio = 1;
   }
 
   private setPlaybackState(state: PlaybackState) {
@@ -490,6 +646,14 @@ class AudioEngine {
       this.guideGainNode.gain.setTargetAtTime(target, this.audioContext.currentTime, 0.01);
     }
 
+    if (this.guidePitchShifter) {
+      const playbackTime = this.getPlaybackPositionSeconds();
+      const ratio = this.computeGuidePitchRatio(playbackTime) ?? 1;
+      const smoothing = 0.1;
+      this.currentPitchRatio += (ratio - this.currentPitchRatio) * smoothing;
+      this.guidePitchShifter.pitch = this.currentPitchRatio;
+    }
+
     this.telemetry.record({
       timestamp: performance.now(),
       vad: this.lastVad,
@@ -535,20 +699,15 @@ class AudioEngine {
   }
 
   private async evaluatePitch(frame: Float32Array) {
-    if (!this.pitchSession) return;
-    try {
-      const tensor = new ort.Tensor("float32", frame, [1, frame.length]);
-      const output = await this.pitchSession.run({ audio: tensor });
-      const probabilities = output.probabilities;
-
-      if (probabilities && probabilities.data instanceof Float32Array) {
-        this.lastPitch = probabilities.data.reduce((max, value) => (value > max ? value : max), 0);
-      } else if (probabilities && Array.isArray(probabilities.data)) {
-        this.lastPitch = probabilities.data.reduce((max: number, value: number) => (value > max ? value : max), 0);
-      }
-    } catch {
+    const result = await this.inferPitch(frame);
+    if (!result) {
       this.lastPitch = 0;
+      this.lastPitchHz = 0;
+      return;
     }
+
+    this.lastPitch = Math.min(1, Math.max(0, result.confidence));
+    this.lastPitchHz = result.frequency;
   }
 
   private updateConfidence(rms?: number) {
@@ -571,6 +730,88 @@ class AudioEngine {
       sum += block[i] * block[i];
     }
     return Math.sqrt(sum / block.length);
+  }
+
+  private computeFrequencyFromSalience(salience: Float32Array) {
+    if (salience.length === 0) {
+      return { frequency: 0, confidence: 0 };
+    }
+
+    let maxIndex = 0;
+    let maxValue = salience[0] ?? 0;
+
+    for (let i = 1; i < salience.length; i += 1) {
+      const value = salience[i];
+      if (value > maxValue) {
+        maxValue = value;
+        maxIndex = i;
+      }
+    }
+
+    const windowRadius = 4;
+    const start = Math.max(0, maxIndex - windowRadius);
+    const end = Math.min(salience.length, maxIndex + windowRadius + 1);
+
+    let weightSum = 0;
+    let productSum = 0;
+
+    for (let i = start; i < end; i += 1) {
+      const weight = salience[i];
+      weightSum += weight;
+      productSum += weight * CREPE_CENTS_MAPPING[i];
+    }
+
+    const cents = weightSum > 0 ? productSum / weightSum : CREPE_CENTS_MAPPING[maxIndex];
+    const frequency = 10 * Math.pow(2, cents / 1200);
+
+    return {
+      frequency: Number.isFinite(frequency) ? frequency : 0,
+      confidence: Number.isFinite(maxValue) ? maxValue : 0
+    };
+  }
+
+  private computeGuidePitchRatio(playbackTimeSeconds: number) {
+    if (this.lastPitchHz <= 0 || this.lastPitch < 0.2) {
+      return null;
+    }
+
+    const { frequency: guideFrequency, confidence: guideConfidence } = this.guidePitchFrameAtTime(playbackTimeSeconds);
+    if (guideFrequency <= 0 || guideConfidence < 0.1) {
+      return null;
+    }
+
+    const ratio = this.lastPitchHz / guideFrequency;
+    if (!Number.isFinite(ratio) || ratio <= 0) {
+      return null;
+    }
+
+    return Math.min(2.5, Math.max(0.5, ratio));
+  }
+
+  private async inferPitch(frame: Float32Array) {
+    if (!this.pitchSession) {
+      return null;
+    }
+    try {
+      const tensor = new ort.Tensor("float32", frame, [1, frame.length]);
+      const output = await this.pitchSession.run({ audio: tensor });
+      const probabilities = output.probabilities;
+      let salience: Float32Array | null = null;
+
+      if (probabilities && probabilities.data instanceof Float32Array) {
+        salience = probabilities.data;
+      } else if (probabilities && Array.isArray(probabilities.data)) {
+        salience = Float32Array.from(probabilities.data);
+      }
+
+      if (!salience) {
+        return null;
+      }
+
+      return this.computeFrequencyFromSalience(salience);
+    } catch {
+      return null;
+    }
   }
 
   private startCalibration() {
@@ -621,9 +862,13 @@ class AudioEngine {
     this.playbackStartTime = 0;
     this.lastVad = 0;
     this.lastPitch = 0;
+    this.lastPitchHz = 0;
     this.lastConfidence = 0;
     this.currentGain = 1;
+    this.currentPitchRatio = 1;
     this.calibrating = false;
+    this.guidePitchAnalysisToken += 1;
+    this.resetGuidePitchTrack();
     this.initialised = false;
   }
 

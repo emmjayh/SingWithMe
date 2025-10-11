@@ -665,16 +665,8 @@ class AudioEngine {
   }
 
   private prepareVadFrame(frame: Float32Array) {
-    this.lastVadFrameLength = frame.length;
-
     if (frame.length === VAD_FRAME_TARGET) {
       return frame;
-    }
-
-    if (!this.vadShapeWarningLogged) {
-      this.vadShapeWarningLogged = true;
-      // eslint-disable-next-line no-console
-      console.warn(`Normalizing unexpected VAD frame length ${frame.length} to ${VAD_FRAME_TARGET}`);
     }
 
     const normalized = new Float32Array(VAD_FRAME_TARGET);
@@ -688,6 +680,16 @@ class AudioEngine {
 
   private async evaluateVad(frame: Float32Array) {
     if (!this.vadSession) return;
+    this.lastVadFrameLength = frame.length;
+    if (frame.length !== VAD_FRAME_TARGET) {
+      if (!this.vadShapeWarningLogged) {
+        this.vadShapeWarningLogged = true;
+        // eslint-disable-next-line no-console
+        console.warn(`Skipping VAD inference for unexpected frame length ${frame.length}`);
+      }
+      this.lastVad = 0;
+      return;
+    }
     try {
       const preparedFrame = this.prepareVadFrame(frame);
       const inputTensor = new ort.Tensor("float32", preparedFrame, [1, preparedFrame.length]);

@@ -4,8 +4,6 @@ import { ConfidenceGate, GateConfig, dbToLinear } from "./confidenceGate";
 import { Calibrator } from "./calibrator";
 import { TelemetryLog } from "./telemetry";
 import { shallow } from "zustand/shallow";
-import { shallow } from "zustand/shallow";
-import { shallow } from "zustand/shallow";
 
 const AUDIO_WORKLET_URL = "/worklets/confidence-gate.worklet.js";
 const SAMPLE_RATE_TARGET = 16000;
@@ -155,7 +153,7 @@ class AudioEngine {
   }
 
   private async setupAudioGraph() {
-    if (!this.audioContext) {
+    if (!this.audioContext || this.audioContext.state === "closed") {
       this.audioContext = new AudioContext({
         sampleRate: this.config.sampleRate,
         latencyHint: "interactive"
@@ -577,11 +575,35 @@ class AudioEngine {
   dispose() {
     this.manualModeUnsub?.();
     this.calibrationStageUnsub?.();
+    this.trackUrlUnsub?.();
+    this.manualModeUnsub = null;
+    this.calibrationStageUnsub = null;
+    this.trackUrlUnsub = null;
+
     this.stop();
     this.workletNode?.disconnect();
     this.micGainNode?.disconnect();
     this.streamSource?.disconnect();
-    this.audioContext?.close();
+    this.workletNode = null;
+    this.micGainNode = null;
+    this.streamSource = null;
+
+    void this.audioContext?.close().catch(() => undefined);
+    this.audioContext = null;
+
+    this.instrumentBuffer = null;
+    this.guideBuffer = null;
+    this.vadSession = null;
+    this.pitchSession = null;
+    this.queue = [];
+    this.processing = false;
+    this.playbackOffset = 0;
+    this.playbackStartTime = 0;
+    this.lastVad = 0;
+    this.lastPitch = 0;
+    this.lastConfidence = 0;
+    this.currentGain = 1;
+    this.calibrating = false;
     this.initialised = false;
   }
 

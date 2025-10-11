@@ -1,26 +1,21 @@
 import { useEffect, useState } from "react";
+import { audioEngine } from "@audio/index";
 import { useAppStore } from "@state/useAppStore";
 
-type CalibrationStage = "idle" | "collecting" | "complete";
-
 export function CalibrationWizard() {
-  const calibrationActive = useAppStore((state) => state.calibrationActive);
-  const setCalibrationActive = useAppStore((state) => state.setCalibrationActive);
-  const setConfidence = useAppStore((state) => state.setConfidence);
+  const calibrationStage = useAppStore((state) => state.calibrationStage);
+  const calibrationResult = useAppStore((state) => state.calibrationResult);
+  const setCalibrationStage = useAppStore((state) => state.setCalibrationStage);
 
-  const [stage, setStage] = useState<CalibrationStage>("idle");
   const [countdown, setCountdown] = useState(10);
 
   useEffect(() => {
     let timer = 0;
-    if (stage === "collecting") {
+    if (calibrationStage === "collecting") {
       timer = window.setInterval(() => {
         setCountdown((value) => {
           if (value <= 1) {
             window.clearInterval(timer);
-            setStage("complete");
-            setCalibrationActive(false);
-            setConfidence(0.75); // placeholder telemetry
             return 0;
           }
           return value - 1;
@@ -28,43 +23,67 @@ export function CalibrationWizard() {
       }, 1000);
     }
     return () => window.clearInterval(timer);
-  }, [stage, setCalibrationActive, setConfidence]);
+  }, [calibrationStage]);
+
+  useEffect(() => {
+    if (calibrationStage === "idle") {
+      setCountdown(10);
+    }
+  }, [calibrationStage]);
 
   const handleStart = () => {
-    setStage("collecting");
+    setCalibrationStage("collecting");
     setCountdown(10);
-    setCalibrationActive(true);
   };
 
   const handleReset = () => {
-    setStage("idle");
+    audioEngine.resetCalibration();
     setCountdown(10);
-    setConfidence(0);
-    setCalibrationActive(false);
+  };
+
+  const handleDownload = () => {
+    audioEngine.downloadTelemetry();
   };
 
   return (
     <div className="calibration-card">
-      {stage === "idle" && (
+      {calibrationStage === "idle" && (
         <>
           <p>Run a 10 second vocal warm-up to set noise floor and peak detection.</p>
-          <button type="button" onClick={handleStart} disabled={calibrationActive}>
+          <button type="button" onClick={handleStart}>
             Start Calibration
           </button>
         </>
       )}
-      {stage === "collecting" && (
+      {calibrationStage === "collecting" && (
         <>
           <p>Sing clearly into the mic. Collecting data…</p>
           <div className="countdown">{countdown}s</div>
         </>
       )}
-      {stage === "complete" && (
+      {calibrationStage === "complete" && (
         <>
-          <p>Calibration complete. Confidence model updated.</p>
-          <button type="button" onClick={handleReset}>
-            Reset
-          </button>
+          <p>Calibration complete.</p>
+          {calibrationResult && (
+            <div className="calibration-summary">
+              <div>
+                <span>Noise floor</span>
+                <strong>{calibrationResult.noiseFloorDb.toFixed(1)} dBFS</strong>
+              </div>
+              <div>
+                <span>Vocal peak</span>
+                <strong>{calibrationResult.vocalPeakDb.toFixed(1)} dBFS</strong>
+              </div>
+            </div>
+          )}
+          <div className="actions">
+            <button type="button" onClick={handleReset}>
+              Reset
+            </button>
+            <button type="button" className="ghost" onClick={handleDownload}>
+              Download Telemetry
+            </button>
+          </div>
         </>
       )}
       <style jsx>{`
@@ -92,13 +111,36 @@ export function CalibrationWizard() {
           letter-spacing: 0.1em;
           font-weight: 600;
         }
-        button:disabled {
-          opacity: 0.5;
+        button.ghost {
+          background: transparent;
+          color: #6bff6b;
+          border: 1px solid rgba(107, 255, 107, 0.6);
         }
         .countdown {
           font-size: 2.5rem;
           font-weight: 600;
           color: #6bff6b;
+        }
+        .calibration-summary {
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+          background: rgba(255, 255, 255, 0.03);
+          border-radius: 10px;
+          padding: 0.75rem 1rem;
+        }
+        .calibration-summary span {
+          font-size: 0.7rem;
+          letter-spacing: 0.15em;
+          text-transform: uppercase;
+          color: #9ca3af;
+        }
+        .calibration-summary strong {
+          font-size: 1.1rem;
+        }
+        .actions {
+          display: flex;
+          gap: 0.75rem;
         }
       `}</style>
     </div>

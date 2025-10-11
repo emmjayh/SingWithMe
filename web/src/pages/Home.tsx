@@ -4,19 +4,18 @@ import { LatencyBadge } from "@components/LatencyBadge";
 import { ModeToggle } from "@components/ModeToggle";
 import { CalibrationWizard } from "@components/CalibrationWizard";
 import { MetersPanel } from "@components/MetersPanel";
-import { AudioEngine } from "@audio/index";
+import { audioEngine } from "@audio/index";
 import "./Home.css";
 
 export default function Home() {
   useEffect(() => {
-    const engine = new AudioEngine();
-    engine
+    audioEngine
       .initialise()
       .catch(() => {
-        // to-do: surface error to toast
+        // TODO: surface error to user
       });
 
-    return () => engine.dispose();
+    return () => audioEngine.dispose();
   }, []);
 
   return (

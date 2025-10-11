@@ -47,11 +47,12 @@ web/
   - `PORT` (provided by Railway)
   - `MODEL_PATH_VAD`, `MODEL_PATH_PITCH` (override default `public/models/` paths)
   - `LATENCY_TARGET_MS` (used for telemetry display)
+  - `VITE_MODEL_PATH_VAD`, `VITE_MODEL_PATH_PITCH` (client-side inference paths)
 - Recommended `Procfile` entry: `web: node dist/server/index.js`.
 - Use Railway persistent storage only for text logs; audio uploads disabled by default.
 
 ## Next Implementation Steps
-1. Implement `ConfidenceGateWorklet` matching the desktop envelope parameters.
-2. Load ONNX Runtime Web VAD/pitch models and feed live confidence into the store.
-3. Capture real calibration samples (10 s) and persist thresholds to IndexedDB.
-4. Expose telemetry download and optional upload endpoint for field debugging.
+1. Wire phrase-aware confidence once streaming ASR/DTW lands (extend weights + node routing).
+2. Replace placeholder guide signal with actual stem playback routed through the AudioWorklet.
+3. Add error toasts for model loading failures and permissions issues.
+4. Gate optional telemetry uploads (signed URLs) when operating in remote support mode.

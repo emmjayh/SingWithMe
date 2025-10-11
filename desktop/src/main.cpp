@@ -3,6 +3,7 @@
 #include <onnxruntime_cxx_api.h>
 
 #include "audio/DeviceManager.h"
+#include "audio/PipelineProcessor.h"
 #include "calibration/Calibrator.h"
 #include "config/RuntimeConfig.h"
 #include "dsp/ConfidenceGate.h"
@@ -50,13 +51,15 @@ public:
                         static_cast<size_t>(runtimeConfig_.bufferSamples),
                         makeGateConfig(runtimeConfig_.gate));
 
-        calibrator_.start(runtimeConfig_.sampleRate);
+        pipelineProcessor_.configure(runtimeConfig_, gate_, *vad_, *pitch_, calibrator_);
+        deviceManager_.manager().addAudioCallback(&pipelineProcessor_);
 
         mainWindow_ = std::make_unique<singwithme::ui::MainWindow>();
     }
 
     void shutdown() override
     {
+        deviceManager_.manager().removeAudioCallback(&pipelineProcessor_);
         mainWindow_.reset();
         pitch_.reset();
         vad_.reset();
@@ -73,6 +76,7 @@ public:
 private:
     std::unique_ptr<singwithme::ui::MainWindow> mainWindow_;
     singwithme::audio::DeviceManager deviceManager_;
+    singwithme::audio::PipelineProcessor pipelineProcessor_;
     Ort::Env ortEnv_{ORT_LOGGING_LEVEL_WARNING, "SingWithMe"};
     std::unique_ptr<singwithme::dsp::VadProcessor> vad_;
     std::unique_ptr<singwithme::dsp::PitchProcessor> pitch_;

@@ -132,6 +132,7 @@ class AudioEngine {
   private guidePitchAnalysisToken = 0;
   private currentPitchRatio = 1;
   private vadShapeWarningLogged = false;
+  private lastVadFrameLength = 0;
 
   async initialise() {
     if (this.initialised) return;
@@ -664,6 +665,8 @@ class AudioEngine {
   }
 
   private prepareVadFrame(frame: Float32Array) {
+    this.lastVadFrameLength = frame.length;
+
     if (frame.length === VAD_FRAME_TARGET) {
       return frame;
     }

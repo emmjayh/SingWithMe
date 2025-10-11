@@ -111,12 +111,10 @@ class AudioEngine {
   private instrumentBuffer: AudioBuffer | null = null;
   private guideBuffer: AudioBuffer | null = null;
   private instrumentSource: AudioBufferSourceNode | null = null;
-  private guideSource: AudioBufferSourceNode | null = null;
   private instrumentGainNode: GainNode | null = null;
   private guideGainNode: GainNode | null = null;
   private vocalBusNode: GainNode | null = null;
   private guidePitchShifter: PitchShifter | null = null;
-  private guidePitchNode: AudioNode | null = null;
   private instrumentBaseGain = 1;
   private guideBaseGain = 1;
 
@@ -419,8 +417,6 @@ class AudioEngine {
       };
 
       this.guidePitchShifter = new PitchShifter(this.audioContext, this.guideBuffer, undefined, handleGuideEnd);
-      const guideNode = this.guidePitchShifter.node;
-      this.guidePitchNode = guideNode;
       this.currentPitchRatio = 1;
       this.guidePitchShifter.pitch = this.currentPitchRatio;
       this.guidePitchShifter.rate = 1;
@@ -434,7 +430,8 @@ class AudioEngine {
       this.guideGainNode = this.audioContext.createGain();
       this.guideGainNode.gain.value = this.currentGain * this.guideBaseGain;
       const guideSink: AudioNode = this.vocalBusNode ?? this.audioContext.destination;
-      guideNode.connect(this.guideGainNode).connect(guideSink);
+      this.guidePitchShifter.connect(this.guideGainNode);
+      this.guideGainNode.connect(guideSink);
     }
   }
 
@@ -457,12 +454,10 @@ class AudioEngine {
       this.guideGainNode.disconnect();
       this.guideGainNode = null;
     }
-    if (this.guidePitchNode) {
-      this.guidePitchNode.disconnect();
-      this.guidePitchNode = null;
+    if (this.guidePitchShifter) {
+      this.guidePitchShifter.disconnect();
+      this.guidePitchShifter = null;
     }
-    this.guidePitchShifter = null;
-    this.guideSource = null;
     this.currentPitchRatio = 1;
   }
 

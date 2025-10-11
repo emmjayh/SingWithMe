@@ -67,7 +67,7 @@ const defaultConfig: EngineConfig = {
     loop: true,
     instrumentGainDb: 0,
     guideGainDb: 0,
-    micMonitorGainDb: -6
+    micMonitorGainDb: Number.NEGATIVE_INFINITY
   },
   latencyTargetMs: Number(import.meta.env.VITE_LATENCY_TARGET_MS ?? 25)
 };
@@ -129,6 +129,7 @@ class AudioEngine {
     this.config.media.instrumentUrl = trackState.instrumentUrl ?? defaultConfig.media.instrumentUrl;
     this.config.media.guideUrl = trackState.guideUrl ?? defaultConfig.media.guideUrl;
     this.gate.configure(this.config.sampleRate, this.config.bufferSamples, this.config.gate);
+    this.currentGain = this.gate.currentGainLinear();
     this.instrumentBaseGain = dbToLinear(this.config.media.instrumentGainDb ?? 0);
     this.guideBaseGain = dbToLinear(this.config.media.guideGainDb ?? 0);
     this.vadState.fill(0);
@@ -191,16 +192,18 @@ class AudioEngine {
     };
 
     this.micGainNode = this.audioContext.createGain();
-    this.micGainNode.gain.value = dbToLinear(this.config.media.micMonitorGainDb ?? -6);
+    const monitorGainLinear = dbToLinear(this.config.media.micMonitorGainDb ?? Number.NEGATIVE_INFINITY);
+    this.micGainNode.gain.value = monitorGainLinear;
+
+    this.streamSource.connect(this.workletNode);
+    this.workletNode.connect(this.micGainNode);
 
     this.vocalBusNode?.disconnect();
     this.vocalBusNode = this.audioContext.createGain();
     this.vocalBusNode.gain.value = 1;
-
-    this.streamSource.connect(this.workletNode);
-    this.workletNode.connect(this.micGainNode);
-    this.micGainNode.connect(this.vocalBusNode);
     this.vocalBusNode.connect(this.audioContext.destination);
+
+    this.micGainNode.connect(this.audioContext.destination);
   }
 
   private async loadModels() {

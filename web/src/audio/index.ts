@@ -674,14 +674,13 @@ class AudioEngine {
       console.warn(`Normalizing unexpected VAD frame length ${frame.length} to ${VAD_FRAME_TARGET}`);
     }
 
-    const result = new Float32Array(VAD_FRAME_TARGET);
-    if (frame.length > VAD_FRAME_TARGET) {
-      result.set(frame.subarray(0, VAD_FRAME_TARGET));
-    } else {
-      result.set(frame);
+    const normalized = new Float32Array(VAD_FRAME_TARGET);
+    const copyLength = Math.min(frame.length, VAD_FRAME_TARGET);
+    for (let i = 0; i < copyLength; i += 1) {
+      normalized[i] = frame[i];
     }
 
-    return result;
+    return normalized;
   }
 
   private async evaluateVad(frame: Float32Array) {

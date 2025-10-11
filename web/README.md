@@ -1,60 +1,40 @@
 # Web Prototype Setup
 
 ## Stack
-- **React + TypeScript** bootstrapped via Vite.
-- **State Management**: Zustand (lightweight) with React Context for Audio I/O bindings.
-- **Audio/DSP**: Web Audio API with AudioWorklet nodes for VAD and gating logic.
-- **Inference**: ONNX Runtime Web (WebAssembly backend) for WebRTC VAD + CREPE-tiny; fallback to TensorFlow.js if WASM fails.
-- **Styling**: Tailwind CSS or CSS-in-JS (e.g., styled-components) using the dark stage-ready palette (#121212 background, lime/amber accents).
+- **React + TypeScript** via Vite.
+- **State Management**: Zustand store for shared audio telemetry and UI state.
+- **Audio/DSP**: Web Audio API (AudioContext + future AudioWorklets) for confidence gating.
+- **Inference**: ONNX Runtime Web (WebAssembly backend) for VAD + pitch (integration pending).
+- **Styling**: Tailwind CSS plus bespoke CSS for the stage-ready palette (#121212 background, lime/amber accents).
 
 ## Project Layout
 ```
 web/
   package.json
   vite.config.ts
+  tsconfig*.json
+  index.html
   src/
-    audio/
-      ConfidenceGateWorklet.ts
-      VadNode.ts
-      PitchNode.ts
-      LatencyMonitor.ts
-    components/
-      MetersPanel.tsx
-      ConfidenceMeter.tsx
-      ModeToggle.tsx
-      CalibrationWizard.tsx
-      LatencyBadge.tsx
-    state/
-      useAppStore.ts
-      selectors.ts
-    pages/
-      Home.tsx
-    index.tsx
-    global.css
+    audio/index.ts             # AudioContext + meter scaffolding
+    components/*.tsx           # UI modules (meters, toggle, calibration)
+    pages/Home.tsx             # Layout + AudioEngine bootstrap
+    state/useAppStore.ts       # Zustand store
+    styles/global.css          # Tailwind + globals
   public/
-    models/
-      vad.onnx
-      crepe_tiny.onnx
-    icons/
-      app-icon.svg
+    .gitkeep                   # populate with models/icons as they land
   server/
-    index.ts           # optional Express wrapper for Railway
+    index.ts                   # Express host for Railway
 ```
 
 ## Commands
-```bash
-# bootstrap (inside web/)
-pnpm create vite@latest . --template react-ts
-pnpm install onnxruntime-web zustand tailwindcss @vitejs/plugin-react
-pnpm dlx tailwindcss init -p
-
-# development
-pnpm dev
-
-# production
-pnpm build
-pnpm preview
-```
+| Action | Command |
+| --- | --- |
+| Install deps | `pnpm install` |
+| Local dev server | `pnpm dev` |
+| Lint | `pnpm lint` |
+| Build (client + server) | `pnpm build` |
+| Preview static build | `pnpm preview` |
+| Railway start command | `pnpm start` |
 
 ## AudioWorklet Integration Steps
 1. Register worklets in `src/audio/index.ts` using `audioContext.audioWorklet.addModule("/worklets/confidence-gate.js")`.
@@ -71,7 +51,7 @@ pnpm preview
 - Use Railway persistent storage only for text logs; audio uploads disabled by default.
 
 ## Next Implementation Steps
-1. Scaffold Vite app and set up Tailwind theme matching desktop palette.
-2. Implement `ConfidenceGateWorklet` mirroring desktop attack/release/hold logic.
-3. Load ONNX Runtime Web models, map output probabilities to UI, and add calibration wizard that captures 10 s noise sample.
-4. Wire logging/telemetry panel with download-to-JSON option for debugging.
+1. Implement `ConfidenceGateWorklet` matching the desktop envelope parameters.
+2. Load ONNX Runtime Web VAD/pitch models and feed live confidence into the store.
+3. Capture real calibration samples (10 s) and persist thresholds to IndexedDB.
+4. Expose telemetry download and optional upload endpoint for field debugging.

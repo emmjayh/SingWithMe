@@ -4,6 +4,8 @@ set(DESKTOP_SOURCES
   dsp/VadProcessor.cpp
   dsp/PitchProcessor.cpp
   dsp/ConfidenceGate.cpp
+  config/RuntimeConfig.cpp
+  calibration/Calibrator.cpp
   ui/MainWindow.cpp
 )
 
@@ -13,6 +15,8 @@ set(DESKTOP_HEADERS
   ${CMAKE_CURRENT_LIST_DIR}/../include/dsp/PitchProcessor.h
   ${CMAKE_CURRENT_LIST_DIR}/../include/dsp/ConfidenceGate.h
   ${CMAKE_CURRENT_LIST_DIR}/../include/ui/MainWindow.h
+  ${CMAKE_CURRENT_LIST_DIR}/../include/config/RuntimeConfig.h
+  ${CMAKE_CURRENT_LIST_DIR}/../include/calibration/Calibrator.h
 )
 
 set(APP_ICON_BIG "")

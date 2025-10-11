@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "sampleRateHz": 48000,
+  "bufferSamples": 128,
+  "models": {
+    "vad": "/models/vad.onnx",
+    "pitch": "/models/crepe_tiny.onnx"
+  },
+  "confidenceWeights": {
+    "vad": 0.6,
+    "pitch": 0.4,
+    "phraseAware": 0.0
+  },
+  "gate": {
+    "lookAheadMs": 10,
+    "attackMs": 20,
+    "releaseMs": 180,
+    "holdMs": 150,
+    "thresholdOn": 0.7,
+    "thresholdOff": 0.4,
+    "framesOn": 3,
+    "framesOff": 6,
+    "duckDb": -18
+  },
+  "ui": {
+    "theme": {
+      "background": "#121212",
+      "accentActive": "#6BFF6B",
+      "accentIdle": "#FFC857"
+    },
+    "manualModes": ["auto", "always_on", "always_off"]
+  },
+  "logging": {
+    "enableConsole": true,
+    "batchSize": 64,
+    "uploadEndpoint": null
+  }
+}

@@ -131,6 +131,7 @@ class AudioEngine {
   private guidePitchConfidenceTrack: Float32Array = new Float32Array();
   private guidePitchAnalysisToken = 0;
   private currentPitchRatio = 1;
+  private vadShapeWarningLogged = false;
 
   async initialise() {
     if (this.initialised) return;
@@ -662,10 +663,32 @@ class AudioEngine {
     store.setConfidence(this.lastConfidence);
   }
 
+  private prepareVadFrame(frame: Float32Array) {
+    if (frame.length === VAD_FRAME_TARGET) {
+      return frame;
+    }
+
+    if (!this.vadShapeWarningLogged) {
+      this.vadShapeWarningLogged = true;
+      // eslint-disable-next-line no-console
+      console.warn(`Normalizing unexpected VAD frame length ${frame.length} to ${VAD_FRAME_TARGET}`);
+    }
+
+    const result = new Float32Array(VAD_FRAME_TARGET);
+    if (frame.length > VAD_FRAME_TARGET) {
+      result.set(frame.subarray(0, VAD_FRAME_TARGET));
+    } else {
+      result.set(frame);
+    }
+
+    return result;
+  }
+
   private async evaluateVad(frame: Float32Array) {
     if (!this.vadSession) return;
     try {
-      const inputTensor = new ort.Tensor("float32", frame, [1, frame.length]);
+      const preparedFrame = this.prepareVadFrame(frame);
+      const inputTensor = new ort.Tensor("float32", preparedFrame, [1, preparedFrame.length]);
       const stateTensor = new ort.Tensor("float32", this.vadState, [2, 1, 128]);
       const srTensor = new ort.Tensor("int64", new BigInt64Array([BigInt(SAMPLE_RATE_TARGET)]));
 

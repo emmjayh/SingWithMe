@@ -1,0 +1,18 @@
+{
+  "extends": "../defaults.json",
+  "media": {
+    "instrumentPath": "assets/audio/demo-instrument.wav",
+    "guidePath": "assets/audio/demo-guide.wav",
+    "loop": true,
+    "instrumentGainDb": -3.0,
+    "guideGainDb": -6.0,
+    "micMonitorGainDb": -9.0
+  },
+  "gate": {
+    "lookAheadMs": 12,
+    "attackMs": 18,
+    "releaseMs": 200,
+    "holdMs": 180,
+    "duckDb": -80
+  }
+}

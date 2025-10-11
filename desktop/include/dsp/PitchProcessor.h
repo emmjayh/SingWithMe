@@ -20,5 +20,6 @@ private:
     std::unique_ptr<Ort::Session> session_;
     Ort::SessionOptions options_;
     std::vector<float> inputBuffer_;
+    std::vector<float> probabilities_;
 };
 } // namespace singwithme::dsp

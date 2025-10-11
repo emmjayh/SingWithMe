@@ -1,0 +1,33 @@
+{
+  "sampleRateHz": 48000,
+  "bufferSamples": 128,
+  "models": {
+    "vad": "models/vad.onnx",
+    "pitch": "models/crepe_tiny.onnx",
+    "modelSampleRateHz": 16000
+  },
+  "confidenceWeights": {
+    "vad": 0.6,
+    "pitch": 0.4,
+    "phraseAware": 0.0
+  },
+  "gate": {
+    "lookAheadMs": 10,
+    "attackMs": 20,
+    "releaseMs": 180,
+    "holdMs": 150,
+    "thresholdOn": 0.7,
+    "thresholdOff": 0.4,
+    "framesOn": 3,
+    "framesOff": 6,
+    "duckDb": -80
+  },
+  "media": {
+    "instrumentPath": "assets/audio/demo-instrument.wav",
+    "guidePath": "assets/audio/demo-guide.wav",
+    "loop": true,
+    "instrumentGainDb": 0.0,
+    "guideGainDb": 0.0,
+    "micMonitorGainDb": -6.0
+  }
+}

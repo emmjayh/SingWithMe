@@ -13,7 +13,6 @@ export interface GateConfig {
 }
 
 const ZERO_DB = 0;
-const MUTE_DB = -80;
 
 export class ConfidenceGate {
   private config: GateConfig;
@@ -28,6 +27,7 @@ export class ConfidenceGate {
 
   constructor(config: GateConfig) {
     this.config = config;
+    this.reset();
   }
 
   configure(sampleRate: number, blockSize: number, config: GateConfig) {
@@ -42,8 +42,8 @@ export class ConfidenceGate {
   }
 
   reset() {
-    this.gainDb = ZERO_DB;
-    this.targetDb = ZERO_DB;
+    this.gainDb = this.config.duckDb;
+    this.targetDb = this.config.duckDb;
     this.holdTimerMs = 0;
     this.consecutiveOn = 0;
     this.consecutiveOff = 0;
@@ -66,10 +66,10 @@ export class ConfidenceGate {
       }
 
       if (this.consecutiveOn >= this.config.framesOn) {
-        this.targetDb = this.config.duckDb;
+        this.targetDb = ZERO_DB;
         this.holdTimerMs = this.config.holdMs;
       } else if (this.consecutiveOff >= this.config.framesOff && this.holdTimerMs <= 0) {
-        this.targetDb = ZERO_DB;
+        this.targetDb = this.config.duckDb;
       }
     }
 

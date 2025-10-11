@@ -5,8 +5,6 @@ import { useAppStore } from "@state/useAppStore";
 export function CalibrationWizard() {
   const calibrationStage = useAppStore((state) => state.calibrationStage);
   const calibrationResult = useAppStore((state) => state.calibrationResult);
-  const setCalibrationStage = useAppStore((state) => state.setCalibrationStage);
-
   const [countdown, setCountdown] = useState(10);
 
   useEffect(() => {
@@ -32,7 +30,7 @@ export function CalibrationWizard() {
   }, [calibrationStage]);
 
   const handleStart = () => {
-    setCalibrationStage("collecting");
+    audioEngine.beginCalibration();
     setCountdown(10);
   };
 
@@ -57,7 +55,7 @@ export function CalibrationWizard() {
       )}
       {calibrationStage === "collecting" && (
         <>
-          <p>Sing clearly into the mic. Collecting data…</p>
+          <p>Sing clearly into the mic. Collecting data</p>
           <div className="countdown">{countdown}s</div>
         </>
       )}

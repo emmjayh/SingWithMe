@@ -2,6 +2,12 @@
 
 #include <string>
 
+namespace juce
+{
+class File;
+class var;
+} // namespace juce
+
 namespace singwithme::config
 {
 struct GateParams
@@ -24,14 +30,26 @@ struct ConfidenceWeights
     float phraseAware{0.0f};
 };
 
+struct MediaConfig
+{
+    std::string instrumentPath{"assets/audio/instrument.wav"};
+    std::string guidePath{"assets/audio/guide.wav"};
+    bool loop{true};
+    float instrumentGainDb{0.0f};
+    float guideGainDb{0.0f};
+    float micMonitorGainDb{-6.0f};
+};
+
 struct RuntimeConfig
 {
     double sampleRate{48000.0};
     int bufferSamples{128};
+    double modelSampleRate{16000.0};
     std::string vadModelPath{"models/vad.onnx"};
     std::string pitchModelPath{"models/crepe_tiny.onnx"};
     ConfidenceWeights weights{};
     GateParams gate{};
+    MediaConfig media{};
 };
 
 class ConfigLoader
@@ -39,5 +57,9 @@ class ConfigLoader
 public:
     RuntimeConfig loadFromFile(const std::string& path) const;
     RuntimeConfig loadDefaults() const;
+
+private:
+    RuntimeConfig loadFromFile(const juce::File& file) const;
+    RuntimeConfig applyOverrides(const RuntimeConfig& baseConfig, const juce::var& overrides, const juce::File& parentDirectory) const;
 };
 } // namespace singwithme::config

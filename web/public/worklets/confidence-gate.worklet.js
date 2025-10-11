@@ -3,17 +3,17 @@ class ConfidenceGateProcessor extends AudioWorkletProcessor {
     super();
     const params = options?.processorOptions ?? {};
     this.bufferSamples = params.bufferSamples ?? 128;
-    this.currentGain = 1;
-    this.targetGain = 1;
+    this.currentGain = params.initialGain ?? 0;
+    this.targetGain = params.initialGain ?? 0;
     this.smoothing = 0.2;
 
     this.port.onmessage = (event) => {
       const { data } = event;
       if (data?.type === "gain" && typeof data.value === "number") {
         this.targetGain = data.value;
-      } else if (data?.type === "reset") {
-        this.currentGain = 1;
-        this.targetGain = 1;
+      } else if (data?.type === "reset" && typeof data.value === "number") {
+        this.currentGain = data.value;
+        this.targetGain = data.value;
       }
     };
   }
@@ -34,9 +34,10 @@ class ConfidenceGateProcessor extends AudioWorkletProcessor {
     for (let i = 0; i < inputChannel.length; i += 1) {
       const sample = inputChannel[i];
       this.currentGain += (this.targetGain - this.currentGain) * this.smoothing;
-      mainOut[i] = sample;
+      const gatedSample = sample * this.currentGain;
+      mainOut[i] = gatedSample;
       if (guideOut) {
-        guideOut[i] = sample * this.currentGain;
+        guideOut[i] = gatedSample;
       }
     }
 

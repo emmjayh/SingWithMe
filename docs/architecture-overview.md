@@ -1,55 +1,28 @@
 # Architecture Overview
 
 ## Shared Signal Flow
-- Capture mono mic input at 48 kHz into 128-sample buffers (â‰ˆ2.7 ms); optionally expose 256-sample fallback for unstable devices.
-- Run WebRTC VAD or Picovoice Cobra on 10 ms frames to derive speech probability, and CREPE-tiny (or PESTO in future) for voiced-pitch probability on overlapping 20-40 ms hops.
-- Combine confidences: `confidence = 0.6 * vad + 0.4 * pitch + w3 * phraseAware`; `w3` defaults to `0.0` until Streaming ASR/DTW is integrated.
-- Feed confidence into the look-ahead sidechain gate: 5-15 ms look-ahead, attack 15-30 ms, release 120-250 ms, hold 100-300 ms, hysteresis tuned via config. Default duck target is -18 dB with option for full mute.
-- Provide manual override (`Always On`, `Always Off`, `Auto`), telemetry meters (VAD, pitch, confidence), and a logging mode that records confidence, gate state, and latency metrics for calibration.
+- Capture mono mic input at 48 kHz in 128-sample callbacks (~2.7 ms). Instrument and guide stems are streamed from disk/web separately and summed downstream.
+- Downsample mic audio to 16 kHz for inference: Silero VAD (stateful, 10 ms frames) and CREPE tiny (64 ms hops) both exported to ONNX.
+- Confidence score: `confidence = 0.6 * vad + 0.4 * pitch + w3 * phraseAware` (with `w3 = 0` in the current build). Optional phrase-aware weighting arrives once streaming ASR / DTW alignment lands.
+- Feed confidence into the look-ahead gate (5–15 ms look-ahead, 15–30 ms attack, 120–250 ms release, 100–300 ms hold, hysteresis) to duck only the guide stem while leaving instruments untouched.
+- Manual overrides (`auto`, `always_on`, `always_off`), calibration (10 s noise-floor capture), and telemetry logging are exposed to help front-of-house engineers tune thresholds quickly.
 
-## Desktop App (JUCE/C++)
-
-### Core Modules
-- `audio::DeviceManager`: wraps JUCE `AudioDeviceManager` with WASAPI/CoreAudio handling, ASIO fallback on Windows.
-- `dsp::VadProcessor`: integrates WebRTC VAD via ONNX Runtime; batches audio into 10 ms frames.
-- `dsp::PitchProcessor`: hosts CREPE-tiny via ONNX Runtime; maintains hop ring buffer for look-ahead.
-- `dsp::ConfidenceGate`: implements hysteresis thresholds, attack/release envelope, and manual override logic.
-- `ui::MainWindow`: JUCE Components for meters, toggles, calibration wizard, latency monitor, and debug console.
-- `telemetry::Recorder`: asynchronous logger writing CSV/JSON into `%APPDATA%/SingWithMe/logs` or `~/Library/Application Support/SingWithMe/logs`.
-
-### Project Layout
-- Use JUCE Projucer/CMake structure under `desktop/` with targets:
-  - `SingWithMeApp` (GUI executable)
-  - `SingWithMeAudioLib` (static library for DSP)
-- Third-party deps: ONNX Runtime (CPU build), WebRTC VAD, optional TorchScript/TensorRT adapters behind feature flags.
-
-### Platform Packaging
-- Windows: CMake -> MSVC build; package via Inno Setup (installer) and ZIP (portable). Offer ASIO driver detection.
-- macOS: CMake -> Xcode bundle; sign/notarize `.app`, wrap in `.dmg`. Integrate Sparkle for auto-updates.
+## Desktop App (JUCE / C++)
+- `audio::PipelineProcessor` mixes mic + stems, performs downsampling, runs ONNX inference (Silero VAD + CREPE tiny), and applies the gate envelope to the guide stem.
+- `config::RuntimeConfig` parses JSON presets (`configs/*.json`) for device/sample settings, gate parameters, model paths, and media locations.
+- `dsp::VadProcessor` and `dsp::PitchProcessor` wrap ONNX Runtime sessions; Silero state tensors are preserved between frames.
+- `calibration::Calibrator` tracks peak/noise levels during the calibration pass; results can be logged or surfaced in the UI.
+- The JUCE UI (placeholder today) is responsible for meters, calibration triggers, and manual override toggles.
+- Models (`models/vad.onnx`, `models/crepe_tiny.onnx`) and stems (`assets/audio/`) live beside the binary; configs describe which files to load.
 
 ## Web Prototype (React + Web Audio)
+- WebAudio `AudioContext` manages the mic AudioWorklet, instrument/guide `AudioBufferSourceNode`s, and gain structure (mic monitor gain + guide gain ducking).
+- ONNX Runtime Web (WASM) runs the same Silero + CREPE exports; state tensors are retained in JS to mirror desktop behaviour.
+- Zustand store keeps telemetry (levels, confidence, calibration stage); React components render meters, mode toggles, and the calibration wizard.
+- Assets mirror the desktop layout: `public/models/` for ONNX files and `public/media/` for stems. Env vars (`VITE_*`) let deployments repoint to CDN/asset hosts.
+- Railway deployment wraps the static build in Express, exposing `/healthz` plus configurable model/media URLs.
 
-### Frontend Structure
-- `web/` workspace using Vite + React + TypeScript.
-- `src/audio/` contains `VadNode` (WebAssembly-compiled WebRTC VAD), `PitchNode` (CREPE TF.js or ONNX Runtime Web), `ConfidenceGateWorklet` (custom AudioWorklet with envelope smoothing).
-- `src/components/`: 
-  - `MetersPanel` (input/output levels)
-  - `ConfidenceMeter` (lime/amber bar)
-  - `ModeToggle` (`Auto`, `Always On`, `Always Off`)
-  - `CalibrationWizard` (10 s noise floor capture)
-  - `LatencyMonitor` (WebRTC stats + buffer estimator)
-- `src/state/` uses Zustand or Redux Toolkit to share latency stats, confidence, and settings.
-
-### Deployment
-- Build static assets via `pnpm build` or `npm run build`.
-- Railway configuration:
-  - Host static build via Node/Express server in `web/server/`.
-  - Environment variables: `MODEL_PATH_VAD`, `MODEL_PATH_PITCH`, `LATENCY_TARGET_MS`, `PORT`, optional `RAILWAY_STATIC_URL`.
-  - Store lightweight ONNX/TF.js models in `public/models/` (<50 MB); larger variants sourced from GitHub Releases/HF at runtime.
-- Logging uses browser `indexedDB` or WebAssembly FS for short-term storage; optional upload endpoint in Express for aggregated logs (disabled by default).
-
-## Next Steps
-1. Initialize CMake/JUCE project under `desktop/` with stub modules and ONNX Runtime integration hooks.
-2. Scaffold Vite React app in `web/` with AudioWorklet placeholder and ONNX Runtime Web loader.
-3. Draft configuration schema shared across platforms (`configs/defaults.yaml`) and CLI tooling for calibration export.
-4. Implement calibration and latency measurement routines, then integrate manual override UI/UX.
+## Notable Differences & Shared Expectations
+- Both runtimes share the same gate defaults (`configs/defaults.json`), model weights, and calibration flow to keep behaviour consistent across platforms.
+- Desktop leans on JUCE for low-latency audio device management (including ASIO/CoreAudio); the web build targets quick demos and Railway-hosted prototypes with slightly higher latency.
+- Phrase-aware gating, richer UI, and telemetry upload hooks are earmarked for future releases once streaming ASR/alignment modules are integrated.

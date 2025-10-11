@@ -14,7 +14,7 @@ struct GateConfig
     float thresholdOff{0.4f};
     int framesOn{3};
     int framesOff{6};
-    float duckDb{-18.0f};
+    float duckDb{-80.0f};
 };
 
 class ConfidenceGate
@@ -29,8 +29,8 @@ private:
     GateConfig config_{};
     float sampleRate_{48000.0f};
     size_t blockSize_{128};
-    float gainDb_{0.0f};
-    float targetDb_{0.0f};
+    float gainDb_{-80.0f};
+    float targetDb_{-80.0f};
     float holdTimerMs_{0.0f};
     int consecutiveOn_{0};
     int consecutiveOff_{0};

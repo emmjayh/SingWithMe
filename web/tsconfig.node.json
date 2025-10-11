@@ -1,12 +1,17 @@
 {
-  "compilerOptions": {
-    "composite": true,
-    "module": "ESNext",
-    "moduleResolution": "Node",
-    "allowSyntheticDefaultImports": true,
-    "esModuleInterop": true,
-    "types": ["node"],
-    "outDir": "./dist/server"
-  },
-  "include": ["vite.config.ts", "server"]
+    "compilerOptions":  {
+                            "composite":  true,
+    "module":  "NodeNext",
+                            "moduleResolution":  "NodeNext",
+                            "allowSyntheticDefaultImports":  true,
+                            "esModuleInterop":  true,
+                            "types":  [
+                                          "node"
+                                      ],
+                            "outDir":  "./dist/server"
+                        },
+    "include":  [
+                    "vite.config.ts",
+                    "server"
+                ]
 }

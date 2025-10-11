@@ -6,6 +6,14 @@
     "vad": "/models/vad.onnx",
     "pitch": "/models/crepe_tiny.onnx"
   },
+  "media": {
+    "instrumentUrl": "/media/instrument.mp3",
+    "guideUrl": "/media/guide.mp3",
+    "loop": true,
+    "instrumentGainDb": 0,
+    "guideGainDb": 0,
+    "micMonitorGainDb": -6
+  },
   "confidenceWeights": {
     "vad": 0.6,
     "pitch": 0.4,

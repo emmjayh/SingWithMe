@@ -1,5 +1,6 @@
 #include "dsp/PitchProcessor.h"
 
+#include <algorithm>
 #include <array>
 #include <stdexcept>
 
@@ -8,8 +9,8 @@ namespace singwithme::dsp
 namespace
 {
 constexpr const char* kInputName = "audio";
-constexpr const char* kOutputName = "voiced_prob";
-constexpr size_t kDefaultHopSamples = 960; // 20 ms @ 48 kHz
+constexpr const char* kOutputName = "probabilities";
+constexpr size_t kExpectedHopSamples = 1024; // 64 ms @ 16 kHz
 } // namespace
 
 PitchProcessor::PitchProcessor(Ort::Env& env)
@@ -22,7 +23,8 @@ PitchProcessor::PitchProcessor(Ort::Env& env)
 void PitchProcessor::loadModel(const std::string& modelPath)
 {
     session_ = std::make_unique<Ort::Session>(env_, modelPath.c_str(), options_);
-    inputBuffer_.resize(kDefaultHopSamples);
+    inputBuffer_.resize(kExpectedHopSamples);
+    probabilities_.resize(360);
 }
 
 float PitchProcessor::processHop(const float* samples, size_t sampleCount)
@@ -57,6 +59,11 @@ float PitchProcessor::processHop(const float* samples, size_t sampleCount)
         &kOutputName,
         1);
 
-    return outputTensors.front().GetTensorMutableData<float>()[0];
+    auto* probs = outputTensors.front().GetTensorMutableData<float>();
+    const auto typeInfo = outputTensors.front().GetTensorTypeAndShapeInfo();
+    const auto elementCount = static_cast<size_t>(typeInfo.GetElementCount());
+
+    probabilities_.assign(probs, probs + elementCount);
+    return *std::max_element(probabilities_.begin(), probabilities_.end());
 }
 } // namespace singwithme::dsp

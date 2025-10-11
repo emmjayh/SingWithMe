@@ -37,7 +37,8 @@ public:
 
     void initialise(const juce::String&) override
     {
-        runtimeConfig_ = configLoader_.loadFromFile("configs/defaults.yaml");
+        const juce::String configPath = juce::SystemStats::getEnvironmentVariable("SINGWITHME_CONFIG", "configs/defaults.json");
+        runtimeConfig_ = configLoader_.loadFromFile(configPath.toStdString());
 
         deviceManager_.initialise(runtimeConfig_.sampleRate, runtimeConfig_.bufferSamples);
 
@@ -46,10 +47,6 @@ public:
 
         pitch_ = std::make_unique<singwithme::dsp::PitchProcessor>(ortEnv_);
         pitch_->loadModel(runtimeConfig_.pitchModelPath);
-
-        gate_.configure(static_cast<float>(runtimeConfig_.sampleRate),
-                        static_cast<size_t>(runtimeConfig_.bufferSamples),
-                        makeGateConfig(runtimeConfig_.gate));
 
         pipelineProcessor_.configure(runtimeConfig_, gate_, *vad_, *pitch_, calibrator_);
         deviceManager_.manager().addAudioCallback(&pipelineProcessor_);

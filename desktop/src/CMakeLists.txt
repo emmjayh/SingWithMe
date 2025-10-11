@@ -54,6 +54,7 @@ target_compile_definitions(SingWithMeApp PRIVATE
   JUCE_MODAL_LOOPS_PERMITTED=1
   JUCE_STRICT_REFCOUNTEDPOINTER=1
   JUCE_WEB_BROWSER=0
+  JUCE_USE_MP3AUDIOFORMAT=1
 )
 
 if(ENABLE_ONNX_RUNTIME)
@@ -66,9 +67,9 @@ if(ENABLE_ONNX_RUNTIME)
 
   target_compile_definitions(SingWithMeApp PRIVATE SINGWITHME_ONNX_RUNTIME=1)
   target_include_directories(SingWithMeApp PRIVATE ${ONNXRUNTIME_INCLUDE_DIR})
-  target_link_libraries(SingWithMeApp PRIVATE ${ONNXRUNTIME_LIBRARY} juce::juce_gui_extra)
+  target_link_libraries(SingWithMeApp PRIVATE ${ONNXRUNTIME_LIBRARY} juce::juce_gui_extra juce::juce_audio_formats)
 else()
   message(WARNING "Building without ONNX Runtime support; inference will be disabled.")
   target_compile_definitions(SingWithMeApp PRIVATE SINGWITHME_ONNX_RUNTIME=0)
-  target_link_libraries(SingWithMeApp PRIVATE juce::juce_gui_extra)
+  target_link_libraries(SingWithMeApp PRIVATE juce::juce_gui_extra juce::juce_audio_formats)
 endif()

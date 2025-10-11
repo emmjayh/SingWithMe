@@ -4,6 +4,7 @@ import { LatencyBadge } from "@components/LatencyBadge";
 import { ModeToggle } from "@components/ModeToggle";
 import { CalibrationWizard } from "@components/CalibrationWizard";
 import { MetersPanel } from "@components/MetersPanel";
+import { TrackUploader } from "@components/TrackUploader";
 import { audioEngine } from "@audio/index";
 import "./Home.css";
 
@@ -37,6 +38,10 @@ export default function Home() {
         <section className="panel calibration">
           <h2>Calibration</h2>
           <CalibrationWizard />
+        </section>
+        <section className="panel upload">
+          <h2>Tracks</h2>
+          <TrackUploader />
         </section>
       </main>
     </div>

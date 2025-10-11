@@ -1,26 +1,43 @@
 #include "audio/PipelineProcessor.h"
 
 #include <juce_audio_basics/juce_audio_basics.h>
+#include <juce_audio_formats/juce_audio_formats.h>
 
-#include <algorithm>
+#include <algorithm>\\n#include <cmath>
 
 namespace singwithme::audio
 {
 namespace
 {
-constexpr size_t kVadSamples = 480;  // 10 ms @ 48 kHz
-constexpr size_t kPitchSamples = 960; // 20 ms @ 48 kHz
+constexpr size_t kVadFrameSamples48k = 480;   // 10 ms @ 48 kHz
+constexpr size_t kVadFrameSamples16k = 160;   // 10 ms @ 16 kHz
+constexpr size_t kPitchFrameSamples48k = 3072; // 64 ms @ 48 kHz
+constexpr size_t kPitchFrameSamples16k = 1024; // 64 ms @ 16 kHz
+constexpr int kMaxOutputChannels = 2;
 
 inline float dbToLinear(float db)
 {
     return juce::Decibels::decibelsToGain(db);
 }
+
+juce::File resolveToWorkingDirectory(const std::string& path)
+{
+    juce::File file(path);
+    if (file.existsAsFile())
+    {
+        return file;
+    }
+    return juce::File::getCurrentWorkingDirectory().getChildFile(path);
+}
 } // namespace
 
 PipelineProcessor::PipelineProcessor()
 {
-    vadFrame_.resize(kVadSamples, 0.0f);
-    pitchFrame_.resize(kPitchSamples, 0.0f);
+    formatManager_.registerBasicFormats();
+    vadFrame48k_.resize(kVadFrameSamples48k, 0.0f);
+    vadFrame16k_.resize(kVadFrameSamples16k, 0.0f);
+    pitchFrame48k_.resize(kPitchFrameSamples48k, 0.0f);
+    pitchFrame16k_.resize(kPitchFrameSamples16k, 0.0f);
 }
 
 void PipelineProcessor::configure(const config::RuntimeConfig& runtimeConfig,
@@ -34,6 +51,7 @@ void PipelineProcessor::configure(const config::RuntimeConfig& runtimeConfig,
     vad_ = &vad;
     pitch_ = &pitch;
     calibrator_ = &calibrator;
+    sourceSampleRate_ = runtimeConfig.sampleRate;
 
     gate_->configure(static_cast<float>(runtimeConfig.sampleRate),
                      static_cast<size_t>(runtimeConfig.bufferSamples),
@@ -48,16 +66,27 @@ void PipelineProcessor::configure(const config::RuntimeConfig& runtimeConfig,
                          runtimeConfig.gate.framesOff,
                          runtimeConfig.gate.duckDb});
 
-    guideBuffer_.resize(static_cast<size_t>(runtimeConfig.bufferSamples));
+    vad_->setModelSampleRate(static_cast<int64_t>(runtimeConfig.modelSampleRate));
+    vad_->resetState();
+    instrumentGain_ = dbToLinear(runtimeConfig.media.instrumentGainDb);
+    guideGain_ = dbToLinear(runtimeConfig.media.guideGainDb);
+    micMonitorGain_ = dbToLinear(runtimeConfig.media.micMonitorGainDb);
+    loopMedia_ = runtimeConfig.media.loop;
+
+    loadMediaBuffers(runtimeConfig);
     resetBuffers();
 }
 
 void PipelineProcessor::audioDeviceAboutToStart(juce::AudioIODevice*)
 {
     resetBuffers();
-    if (calibrator_)
+    vad_->resetState();
+    instrumentPosition_ = 0;
+    guidePosition_ = 0;
+
+    if (calibrator_ && runtimeConfig_)
     {
-        calibrator_->start(runtimeConfig_ ? runtimeConfig_->sampleRate : 48000.0);
+        calibrator_->start(runtimeConfig_->sampleRate);
     }
 }
 
@@ -72,27 +101,20 @@ void PipelineProcessor::audioDeviceIOCallback(const float* const* inputChannelDa
                                               int numOutputChannels,
                                               int numSamples)
 {
-    if (numInputChannels <= 0 || inputChannelData == nullptr || outputChannelData == nullptr)
+    if (outputChannelData == nullptr || numOutputChannels <= 0)
     {
         return;
     }
 
-    const float* input = inputChannelData[0];
-    float* output = outputChannelData[0];
-
-    if (output != nullptr)
+    for (int ch = 0; ch < numOutputChannels; ++ch)
     {
-        std::fill(output, output + numSamples, 0.0f);
+        if (outputChannelData[ch] != nullptr)
+        {
+            std::fill(outputChannelData[ch], outputChannelData[ch] + numSamples, 0.0f);
+        }
     }
 
-    processSamples(input, output, numSamples);
-
-    // Copy processed guide buffer into channel 1 if available (placeholder for guide track).
-    if (numOutputChannels > 1 && outputChannelData[1] != nullptr)
-    {
-        auto* guideOut = outputChannelData[1];
-        std::copy(guideBuffer_.begin(), guideBuffer_.begin() + numSamples, guideOut);
-    }
+    processSamples(inputChannelData, numInputChannels, outputChannelData, numOutputChannels, numSamples);
 }
 
 void PipelineProcessor::resetBuffers()
@@ -104,77 +126,113 @@ void PipelineProcessor::resetBuffers()
     phraseScore_ = 0.0f;
     confidence_ = 0.0f;
 
-    std::fill(vadFrame_.begin(), vadFrame_.end(), 0.0f);
-    std::fill(pitchFrame_.begin(), pitchFrame_.end(), 0.0f);
-    std::fill(guideBuffer_.begin(), guideBuffer_.end(), 0.0f);
+    std::fill(vadFrame48k_.begin(), vadFrame48k_.end(), 0.0f);
+    std::fill(vadFrame16k_.begin(), vadFrame16k_.end(), 0.0f);
+    std::fill(pitchFrame48k_.begin(), pitchFrame48k_.end(), 0.0f);
+    std::fill(pitchFrame16k_.begin(), pitchFrame16k_.end(), 0.0f);
 }
 
-void PipelineProcessor::processSamples(const float* input, float* output, int numSamples)
+void PipelineProcessor::processSamples(const float* const* inputs,
+                                       int numInputChannels,
+                                       float* const* outputs,
+                                       int numOutputChannels,
+                                       int numSamples)
 {
-    if (runtimeConfig_ == nullptr || gate_ == nullptr || vad_ == nullptr || pitch_ == nullptr)
+    if (!runtimeConfig_ || !gate_ || !vad_ || !pitch_)
     {
-        if (output != nullptr)
-        {
-            std::copy(input, input + numSamples, output);
-        }
         return;
     }
 
+    const float* micInput = (numInputChannels > 0 && inputs != nullptr) ? inputs[0] : nullptr;
     const int bufferSamples = runtimeConfig_->bufferSamples;
+    const double ratio = runtimeConfig_->modelSampleRate > 0.0 ? sourceSampleRate_ / runtimeConfig_->modelSampleRate : 3.0;
+    const size_t downsampleFactor = std::max<size_t>(1, static_cast<size_t>(std::round(ratio)));
 
     for (int i = 0; i < numSamples; ++i)
     {
-        float sample = input != nullptr ? input[i] : 0.0f;
+        const float micSample = micInput ? micInput[i] : 0.0f;
 
         if (calibrator_)
         {
-            float sampleCopy = sample;
+            float sampleCopy = micSample;
             calibrator_->processBlock(&sampleCopy, 1);
         }
 
-        if (vadOffset_ < kVadSamples)
+        if (vadOffset_ < kVadFrameSamples48k)
         {
-            vadFrame_[vadOffset_++] = sample;
+            vadFrame48k_[vadOffset_] = micSample;
         }
-        if (pitchOffset_ < kPitchSamples)
+        if (pitchOffset_ < kPitchFrameSamples48k)
         {
-            pitchFrame_[pitchOffset_++] = sample;
+            pitchFrame48k_[pitchOffset_] = micSample;
         }
 
-        if (vadOffset_ == kVadSamples)
+        ++vadOffset_;
+        ++pitchOffset_;
+
+        if (vadOffset_ == kVadFrameSamples48k)
         {
-            runVad(vadFrame_.data());
+            for (size_t j = 0; j < kVadFrameSamples16k; ++j)
+            {
+                const size_t offset = j * downsampleFactor;
+                const size_t samplesRemaining = kVadFrameSamples48k - offset;
+                const size_t count = std::min(downsampleFactor, samplesRemaining);
+                vadFrame16k_[j] = downsampleAverage(vadFrame48k_.data(), offset, count);
+            }
+            runVad(vadFrame16k_.data());
             vadOffset_ = 0;
         }
 
-        if (pitchOffset_ == kPitchSamples)
+        if (pitchOffset_ == kPitchFrameSamples48k)
         {
-            runPitch(pitchFrame_.data());
+            for (size_t j = 0; j < kPitchFrameSamples16k; ++j)
+            {
+                const size_t offset = j * downsampleFactor;
+                const size_t samplesRemaining = kPitchFrameSamples48k - offset;
+                const size_t count = std::min(downsampleFactor, samplesRemaining);
+                pitchFrame16k_[j] = downsampleAverage(pitchFrame48k_.data(), offset, count);
+            }
+            runPitch(pitchFrame16k_.data());
             pitchOffset_ = 0;
         }
 
         updateConfidence();
+        const float gateGainDb = gate_->update(confidence_, vadScore_, pitchScore_);
+        const float gateGainLinear = dbToLinear(gateGainDb);
 
-        const float gainDb = gate_->update(confidence_, vadScore_, pitchScore_);
-        const float gainLin = dbToLinear(gainDb);
+        const float instrumentLeft = nextInstrumentSample(0);
+        const float instrumentRight = nextInstrumentSample(1);
+        const float guideLeft = nextGuideSample(0) * gateGainLinear;
+        const float guideRight = nextGuideSample(1) * gateGainLinear;
+        const float micContribution = micSample * micMonitorGain_;
 
-        if (i < bufferSamples)
+        if (numOutputChannels > 0 && outputs[0])
         {
-            guideBuffer_[static_cast<size_t>(i)] = sample * gainLin;
+            outputs[0][i] += instrumentLeft + (guideLeft * guideGain_) + micContribution;
         }
 
-        if (output != nullptr)
+        if (numOutputChannels > 1 && outputs[1])
         {
-            output[i] = sample; // pass-through mic input to main output for monitoring
+            outputs[1][i] += instrumentRight + (guideRight * guideGain_) + micContribution;
         }
+
+        for (int ch = 2; ch < std::min(numOutputChannels, kMaxOutputChannels); ++ch)
+        {
+            if (outputs[ch])
+            {
+                outputs[ch][i] += micContribution;
+            }
+        }
+
+        advanceMediaPositions();
     }
 }
 
-void PipelineProcessor::runVad(const float* frame)
+void PipelineProcessor::runVad(const float* frame16k)
 {
     try
     {
-        vadScore_ = vad_->processFrame(frame, kVadSamples);
+        vadScore_ = vad_->processFrame(frame16k, kVadFrameSamples16k);
     }
     catch (...)
     {
@@ -182,11 +240,11 @@ void PipelineProcessor::runVad(const float* frame)
     }
 }
 
-void PipelineProcessor::runPitch(const float* frame)
+void PipelineProcessor::runPitch(const float* frame16k)
 {
     try
     {
-        pitchScore_ = pitch_->processHop(frame, kPitchSamples);
+        pitchScore_ = pitch_->processHop(frame16k, kPitchFrameSamples16k);
     }
     catch (...)
     {
@@ -205,5 +263,129 @@ void PipelineProcessor::updateConfidence()
     const auto& weights = runtimeConfig_->weights;
     confidence_ = (weights.vad * vadScore_) + (weights.pitch * pitchScore_) + (weights.phraseAware * phraseScore_);
     confidence_ = std::clamp(confidence_, 0.0f, 1.0f);
+}
+
+bool PipelineProcessor::loadMediaBuffers(const config::RuntimeConfig& runtimeConfig)
+{
+    bool loaded = false;
+    if (loadAudioFile(runtimeConfig.media.instrumentPath, instrumentBuffer_, runtimeConfig.sampleRate))
+    {
+        instrumentPosition_ = 0;
+        loaded = true;
+    }
+
+    if (loadAudioFile(runtimeConfig.media.guidePath, guideBuffer_, runtimeConfig.sampleRate))
+    {
+        guidePosition_ = 0;
+        loaded = true;
+    }
+
+    return loaded;
+}
+
+float PipelineProcessor::nextInstrumentSample(int channel)
+{
+    if (instrumentBuffer_.getNumSamples() == 0)
+    {
+        return 0.0f;
+    }
+
+    const int channelToUse = std::min(channel, instrumentBuffer_.getNumChannels() - 1);
+    const float sample = instrumentBuffer_.getSample(channelToUse, static_cast<int>(instrumentPosition_));
+    return sample * instrumentGain_;
+}
+
+float PipelineProcessor::nextGuideSample(int channel)
+{
+    if (guideBuffer_.getNumSamples() == 0)
+    {
+        return 0.0f;
+    }
+
+    const int channelToUse = std::min(channel, guideBuffer_.getNumChannels() - 1);
+    const float sample = guideBuffer_.getSample(channelToUse, static_cast<int>(guidePosition_));
+    return sample;
+}
+
+void PipelineProcessor::advanceMediaPositions()
+{
+    if (instrumentBuffer_.getNumSamples() > 0)
+    {
+        ++instrumentPosition_;
+        if (instrumentPosition_ >= static_cast<size_t>(instrumentBuffer_.getNumSamples()))
+        {
+            instrumentPosition_ = loopMedia_ ? 0 : instrumentBuffer_.getNumSamples() - 1;
+        }
+    }
+
+    if (guideBuffer_.getNumSamples() > 0)
+    {
+        ++guidePosition_;
+        if (guidePosition_ >= static_cast<size_t>(guideBuffer_.getNumSamples()))
+        {
+            guidePosition_ = loopMedia_ ? 0 : guideBuffer_.getNumSamples() - 1;
+        }
+    }
+}
+
+float PipelineProcessor::downsampleAverage(const float* data, size_t offset, size_t count)
+{
+    if (count == 0)
+    {
+        return 0.0f;
+    }
+
+    float sum = 0.0f;
+    for (size_t i = 0; i < count; ++i)
+    {
+        sum += data[offset + i];
+    }
+    return sum / static_cast<float>(count);
+}
+
+juce::File PipelineProcessor::resolveFile(const std::string& path) const
+{
+    return resolveToWorkingDirectory(path);
+}
+
+bool PipelineProcessor::loadAudioFile(const std::string& path, juce::AudioBuffer<float>& destination, double targetSampleRate)
+{
+    juce::File file = resolveFile(path);
+    if (!file.existsAsFile())
+    {
+        destination.setSize(0, 0);
+        return false;
+    }
+
+    std::unique_ptr<juce::AudioFormatReader> reader(formatManager_.createReaderFor(file));
+    if (reader == nullptr)
+    {
+        destination.setSize(0, 0);
+        return false;
+    }
+
+    const int numChannels = static_cast<int>(reader->numChannels);
+    const int64_t totalSamples = static_cast<int64_t>(reader->lengthInSamples);
+    juce::AudioBuffer<float> tempBuffer(numChannels, static_cast<int>(totalSamples));
+    reader->read(&tempBuffer, 0, static_cast<int>(totalSamples), 0, true, true);
+
+    if (std::abs(reader->sampleRate - targetSampleRate) < 1e-3)
+    {
+        destination = std::move(tempBuffer);
+        return true;
+    }
+
+    const double ratio = reader->sampleRate / targetSampleRate;
+    const int resampledSamples = static_cast<int>(std::ceil(totalSamples / ratio));
+    destination.setSize(numChannels, resampledSamples);
+
+    juce::LagrangeInterpolator interpolator;
+    for (int ch = 0; ch < numChannels; ++ch)
+    {
+        interpolator.reset();
+        interpolator.process(ratio, tempBuffer.getReadPointer(ch), destination.getWritePointer(ch), resampledSamples);
+    }
+
+    return true;
 }
 } // namespace singwithme::audio

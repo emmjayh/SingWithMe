@@ -1,0 +1,7 @@
+assets/audio/*
+!assets/audio/.gitkeep
+web/public/media/*
+!web/public/media/.gitkeep
+
+web/node_modules
+web/dist

@@ -1,0 +1,14 @@
+[phases.setup]
+nixPkgs = ["nodejs_20", "nodePackages.pnpm"]
+
+[phases.install]
+cmd = "cd web && pnpm install --fix-lockfile"
+
+[phases.build]
+cmd = "cd web && pnpm build"
+
+[start]
+cmd = "cd web && pnpm install --fix-lockfile --production=false && pnpm build && pnpm start"
+
+[variables]
+PNPM_OVERRIDE_VALIDATE_CONTINUE = "be-liberal"

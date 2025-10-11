@@ -1,31 +1,34 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-- `src/singwithme/` hosts the live pipeline (`vad/`, `pitch/`, `alignment/`, `ducking/`); keep Mic -> VAD -> Pitch -> optional ASR/DTW -> Gate mirrored in code, configs, and tests.
-- Assets and tooling live in `models/` (WebRTC VAD, CREPE, phoneme timelines, Git LFS logged in `models/README.md`), `configs/` (latency and show presets), `scripts/` (prep/profile helpers), `tests/` (unit/integration/perf plus `tests/fixtures/audio/`), and `assets/guide_vocals/`.
+- `src/singwithme/` houses runtime modules (`vad/`, `pitch/`, `alignment/`, `ducking/`). Mirror the Mic ? VAD ? Pitch ? (optional) ASR/DTW ? Gate flow in code, configs, and tests.
+- Shared assets: `models/` contains Silero VAD + CREPE tiny ONNX exports, `configs/` holds JSON presets (per-target overrides in nested folders), `assets/audio/` is reserved for local stems (git-ignored), `scripts/` carries helper tooling, and `tests/` mirrors the runtime tree.
 
 ## Build, Test, and Development Commands
-- `python -m venv .venv && .\.venv\Scripts\activate` or `scripts\activate.ps1`, then `pip install -r requirements.txt`.
-- `ruff check src tests`, `mypy src`, and `pytest --cov=src/singwithme --cov-report term-missing` keep lint, types, and coverage green.
-- `python -m singwithme.demo --mic default --guide assets\guide_vocals\demo.wav` runs the end-to-end ducking demo.
+- Activate a virtualenv then `pip install -r requirements.txt` for Python tooling; `cmake` + JUCE drive the desktop build, `pnpm install` powers the web workspace.
+- `ruff check src tests`, `mypy src`, and `pytest --cov=src/singwithme --cov-report term-missing` keep lint, types, and coverage healthy.
+- Desktop: configure with CMake (`cmake -S desktop ...`), run from `build/desktop/Release/SingWithMeApp.exe`. Web: `pnpm dev` for local dev, `pnpm build` for production assets.
 
 ## Coding Style & Naming Conventions
-- Python 3.11+, formatted with Black (line length 100), linted with Ruff, and fully type-annotated on public APIs.
-- Prefer snake_case for functions/modules, PascalCase for classes, YAML-aligned config keys (e.g., `latency_ms`), allocation-free callbacks, and asset names `<song>-<bpm>-<role>.wav` with any exceptions marked `# realtime:`.
+- Python 3.11+, Black (line length 100) and Ruff; type-annotate public APIs. C++ follows JUCE style with minimal heap work inside audio callbacks.
+- Config keys use lowerCamelCase in JSON, code uses `snake_case` for functions/modules and `PascalCase` for types.
+- Keep real-time paths allocation-free (`// realtime:` comment any unavoidable work) and name stem files `<song>-<bpm>-<role>.wav` where possible.
 
 ## Testing Guidelines
-- Use `pytest` and `pytest-asyncio` with `soundfile` fixtures for streaming snapshots; mirror runtime structure when adding suites.
-- Maintain >=85% coverage overall and 100% for `ducking/state_machine.py`, updating limits in `tests/perf/test_latency.py` when timing shifts.
+- Python: `pytest` + `pytest-asyncio` with short audio fixtures under `tests/fixtures/audio/`.
+- Aim for =85% overall coverage and 100% on the gating state machine; keep latency regression tests updated (`tests/perf/test_latency.py`).
+- Web: add Playwright/React Testing Library coverage for UI logic once the interface hardens.
 
 ## Commit & Pull Request Guidelines
-- Follow Conventional Commits (examples `feat(vad):`, `fix(pitch):`), squash before PRs, and rebase on `main`.
-- PRs document latency deltas, dependency changes, manual validation, and link issues; attach short demo audio when behavior is audible.
+- Use Conventional Commits (`feat(vad):`, `fix(pipeline):`, etc.). Rebase onto `main`, squash WIP, and document latency deltas, dependency changes, and manual validation in the PR body.
+- Attach short audio clips or screenshots whenever gating behaviour, latency, or UI changes are audible/visible.
 
 ## Latency Targets & Signal Flow
-- Hold total latency under 25 ms using 128-sample I/O buffers (~2.7 ms at 48 kHz), 10 ms VAD frames, 20-40 ms pitch hops, and 5-15 ms gate look-ahead.
-- Treat ASR/DTW confidence as advisory in v1, and keep guide stems separate from instrumentals with optional JSON phoneme timelines.
+- Budget <25 ms end-to-end: 128-sample I/O buffers (~2.7 ms @48 kHz), 10 ms VAD windows (downsampled to 16 kHz), 64 ms pitch hops (overlapping), and 5–15 ms gate look-ahead.
+- ASR/DTW confidence remains advisory in v1; the system must degrade gracefully when phrase awareness drops out.
+- Keep guide stems logically separate from instruments. Config JSON (`media.instrumentPath`, `media.guidePath`) or env vars (`VITE_INSTRUMENT_URL`, `VITE_GUIDE_URL`) point to the assets per show.
 
 ## Guide Ducking & Confidence Logic
-- Start with `confidence = 0.6*VAD + 0.4*Pitch + 0.0*PhraseAware`; require `N_on=3` frames to duck and `N_off=6` to release, raising `w3` once ASR ships.
-- Duck when confidence >0.7, restore when it drops <0.4, defaulting to a -18 dB safety bed with configurable full mute.
-- Configure the envelope for 5-15 ms look-ahead, 15-30 ms attack, 120-250 ms release, 100-300 ms hold, plus hysteresis captured in `configs/latency/`; expose manual override and meters for soundcheck confidence.
+- Baseline weighting: `confidence = 0.6 * vad + 0.4 * pitch + 0.0 * phraseAware`; require `N_on = 3` consecutive frames to duck, `N_off = 6` to restore.
+- Default gate envelope: look-ahead 10 ms, attack 20 ms, release 180 ms, hold 150 ms, duck to -18 dB (safety bed) unless a show preset overrides.
+- Manual overrides (`auto`, `always_on`, `always_off`), calibration UI, and telemetry logging should stay wired in across platforms so front-of-house can trust the system quickly.

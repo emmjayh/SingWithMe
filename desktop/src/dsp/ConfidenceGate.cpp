@@ -16,8 +16,8 @@ void ConfidenceGate::configure(float sampleRate, size_t blockSize, GateConfig co
     sampleRate_ = sampleRate;
     blockSize_ = blockSize;
     config_ = config;
-    gainDb_ = kZeroDb;
-    targetDb_ = kZeroDb;
+    gainDb_ = config_.duckDb;
+    targetDb_ = config_.duckDb;
     holdTimerMs_ = 0.0f;
     consecutiveOn_ = 0;
     consecutiveOff_ = 0;
@@ -61,12 +61,12 @@ float ConfidenceGate::update(float confidence, float vad, float pitch)
 
         if (consecutiveOn_ >= config_.framesOn)
         {
-            targetDb_ = config_.duckDb;
+            targetDb_ = kZeroDb;
             holdTimerMs_ = config_.holdMs;
         }
         else if (consecutiveOff_ >= config_.framesOff && holdTimerMs_ <= 0.0f)
         {
-            targetDb_ = kZeroDb;
+            targetDb_ = config_.duckDb;
         }
     }
 

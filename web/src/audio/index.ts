@@ -133,6 +133,7 @@ class AudioEngine {
   private currentPitchRatio = 1;
   private vadShapeWarningLogged = false;
   private lastVadFrameLength = 0;
+  private vadFailed = false;
 
   async initialise() {
     if (this.initialised) return;
@@ -679,7 +680,7 @@ class AudioEngine {
   }
 
   private async evaluateVad(frame: Float32Array) {
-    if (!this.vadSession) return;
+    if (!this.vadSession || this.vadFailed) return;
     this.lastVadFrameLength = frame.length;
     if (frame.length !== VAD_FRAME_TARGET) {
       if (!this.vadShapeWarningLogged) {
@@ -715,7 +716,12 @@ class AudioEngine {
       if (stateN && stateN.data instanceof Float32Array) {
         this.vadState.set(stateN.data);
       }
-    } catch {
+    } catch (error) {
+      if (!this.vadFailed) {
+        this.vadFailed = true;
+        // eslint-disable-next-line no-console
+        console.warn("VAD inference failed, falling back to energy-based gating", error);
+      }
       this.lastVad = 0;
     }
   }

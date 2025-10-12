@@ -12,6 +12,7 @@ const VAD_FRAME_SOURCE = 480; // 10 ms @ 48 kHz
 const VAD_FRAME_TARGET = 160; // 10 ms @ 16 kHz
 const PITCH_FRAME_SOURCE = 3072; // 64 ms @ 48 kHz
 const PITCH_FRAME_TARGET = 1024; // 64 ms @ 16 kHz
+const MAX_QUEUE_LENGTH = 32;
 
 const CREPE_CENTS_MAPPING = new Float32Array(360);
 for (let i = 0; i < CREPE_CENTS_MAPPING.length; i += 1) {
@@ -576,6 +577,11 @@ class AudioEngine {
 
   private enqueueBlock(block: Float32Array) {
     this.queue.push(block);
+    if (this.queue.length > MAX_QUEUE_LENGTH) {
+      this.queue.splice(0, this.queue.length - MAX_QUEUE_LENGTH);
+      // eslint-disable-next-line no-console
+      console.warn("AudioEngine queue overflow, dropping oldest blocks");
+    }
     if (!this.processing) {
       void this.drainQueue();
     }

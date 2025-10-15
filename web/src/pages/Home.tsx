@@ -49,6 +49,11 @@ export default function Home() {
           <TrackUploader />
         </section>
       </main>
+      <footer className="app-footer">
+        <a href="/privacy.html" target="_blank" rel="noreferrer">
+          Privacy Policy
+        </a>
+      </footer>
     </div>
   );
 }

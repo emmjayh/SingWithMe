@@ -16,7 +16,7 @@ export function TrackUploader() {
   const guideUrl = useAppStore((state) => state.guideUrl);
   const playbackState = useAppStore((state) => state.playbackState);
   const setTrackUrls = useAppStore((state) => state.setTrackUrls);
-  const resetTrackUrls = useAppStore((state) => state.resetTrackUrls);
+  const loadSampleTracks = useAppStore((state) => state.loadSampleTracks);
 
   const [instrumentFile, setInstrumentFile] = useState<File | null>(null);
   const [guideFile, setGuideFile] = useState<File | null>(null);
@@ -69,8 +69,8 @@ export function TrackUploader() {
     }
   };
 
-  const handleReset = () => {
-    resetTrackUrls();
+  const handleLoadSampleTracks = () => {
+    loadSampleTracks();
     audioEngine.stop();
     setInstrumentFile(null);
     setGuideFile(null);
@@ -110,7 +110,12 @@ export function TrackUploader() {
           <button type="submit" disabled={disableSubmit}>
             {status === "uploading" ? "Uploading" : "Upload"}
           </button>
-          <button type="button" className="ghost" onClick={handleReset} disabled={status === "uploading"}>
+          <button
+            type="button"
+            className="ghost"
+            onClick={handleLoadSampleTracks}
+            disabled={status === "uploading"}
+          >
             Load sample tracks
           </button>
         </div>

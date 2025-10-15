@@ -16,6 +16,8 @@ export interface TrackUrls {
 
 const defaultInstrumentUrl = import.meta.env.VITE_INSTRUMENT_URL ?? "/media/braykit-instrument.mp3";
 const defaultGuideUrl = import.meta.env.VITE_GUIDE_URL ?? "/media/braykit-guide.mp3";
+const sampleInstrumentUrl = "/media/demo-instrument.wav";
+const sampleGuideUrl = "/media/demo-guide.wav";
 
 interface AppState {
   inputLevel: number;
@@ -43,6 +45,7 @@ interface AppState {
   setPlaybackState: (state: PlaybackState) => void;
   setTrackUrls: (urls: TrackUrls) => void;
   resetTrackUrls: () => void;
+  loadSampleTracks: () => void;
   setNoiseFloor: (value: number) => void;
   setMicMonitorGainDb: (value: number) => void;
   setCrowdCancelStrength: (value: number) => void;
@@ -80,10 +83,16 @@ export const useAppStore = create<AppState>((set) => ({
       instrumentUrl: instrumentUrl ?? state.instrumentUrl,
       guideUrl: guideUrl ?? state.guideUrl
     })),
-  resetTrackUrls: () => set({
-    instrumentUrl: defaultInstrumentUrl,
-    guideUrl: defaultGuideUrl
-  }),
+  resetTrackUrls: () =>
+    set({
+      instrumentUrl: defaultInstrumentUrl,
+      guideUrl: defaultGuideUrl
+    }),
+  loadSampleTracks: () =>
+    set({
+      instrumentUrl: sampleInstrumentUrl,
+      guideUrl: sampleGuideUrl
+    }),
   setNoiseFloor: (noiseFloor) => set({ noiseFloor }),
   setMicMonitorGainDb: (micMonitorGainDb) => set({ micMonitorGainDb }),
   setCrowdCancelStrength: (crowdCancelStrength) => set({ crowdCancelStrength }),

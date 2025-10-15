@@ -1359,16 +1359,20 @@ class AudioEngine {
 
   private updateConfidence(rms?: number) {
     const weights = this.config.confidenceWeights;
+    const energy = Number.isFinite(rms) ? Math.max(0, rms ?? 0) : 0;
+    const energyGate = clamp(energy / 0.01, 0, 1);
+
+    if (energyGate <= 0.001) {
+      this.lastPitch = 0;
+      this.lastPitchHz = 0;
+    }
+
     let combined = weights.vad * this.lastVad + weights.pitch * this.lastPitch + weights.phraseAware * 0;
 
     combined = Math.max(combined, this.lastVad);
+    combined *= energyGate;
 
-    if (typeof rms === "number") {
-      const energyConfidence = Math.min(1, rms / 0.05);
-      combined = Math.max(combined, energyConfidence);
-    }
-
-    this.lastConfidence = Math.min(1, Math.max(0, combined));
+    this.lastConfidence = clamp(combined, 0, 1);
   }
 
   private computeFrequencyFromSalience(salience: Float32Array) {

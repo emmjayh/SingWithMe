@@ -1069,12 +1069,24 @@ class AudioEngine {
   }
 
   private async drainQueue() {
-    this.processing = true;
-    while (this.queue.length > 0) {
-      const block = this.queue.shift() as Float32Array;
-      await this.processBlock(block);
+    if (this.processing) {
+      return;
     }
-    this.processing = false;
+
+    this.processing = true;
+    try {
+      while (this.queue.length > 0) {
+        const block = this.queue.shift() as Float32Array;
+        try {
+          await this.processBlock(block);
+        } catch (error) {
+          // eslint-disable-next-line no-console
+          console.error("AudioEngine block processing failed", error);
+        }
+      }
+    } finally {
+      this.processing = false;
+    }
   }
 
   private async processBlock(block: Float32Array) {

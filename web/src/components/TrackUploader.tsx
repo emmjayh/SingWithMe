@@ -111,7 +111,7 @@ export function TrackUploader() {
             {status === "uploading" ? "Uploading" : "Upload"}
           </button>
           <button type="button" className="ghost" onClick={handleReset} disabled={status === "uploading"}>
-            Reset to defaults
+            Load sample tracks
           </button>
         </div>
 

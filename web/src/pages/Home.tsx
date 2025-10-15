@@ -65,13 +65,13 @@ export default function Home() {
             </a>
             <a
               className="download-button"
-              href="https://github.com/emmjayh/SingWithMe/releases/latest"
+              href="https://buy.stripe.com/4gM28sfkj4YfafodWK"
               target="_blank"
               rel="noreferrer"
             >
               <img src="/assets/TuneTrixIcon-32.png" alt="TuneTrix icon" />
               <div>
-                <span className="download-label">Download for</span>
+                <span className="download-label">Purchase for</span>
                 <span className="download-destination">Windows PC</span>
               </div>
             </a>

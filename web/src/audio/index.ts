@@ -105,8 +105,8 @@ const defaultConfig: EngineConfig = {
     duckDb: -80
   },
   media: {
-    instrumentUrl: import.meta.env.VITE_INSTRUMENT_URL ?? "/media/demo-instrument.wav",
-    guideUrl: import.meta.env.VITE_GUIDE_URL ?? "/media/demo-guide.wav",
+    instrumentUrl: import.meta.env.VITE_INSTRUMENT_URL ?? "/media/braykit-instrument.mp3",
+    guideUrl: import.meta.env.VITE_GUIDE_URL ?? "/media/braykit-guide.mp3",
     loop: true,
     instrumentGainDb: 0,
     guideGainDb: 0,

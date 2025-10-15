@@ -32,12 +32,22 @@ struct ConfidenceWeights
 
 struct MediaConfig
 {
-    std::string instrumentPath{"assets/audio/instrument.wav"};
-    std::string guidePath{"assets/audio/guide.wav"};
+    std::string instrumentPath{"assets/audio/braykit-instrument.mp3"};
+    std::string guidePath{"assets/audio/braykit-guide.mp3"};
     bool loop{true};
     float instrumentGainDb{0.0f};
     float guideGainDb{0.0f};
-    float micMonitorGainDb{-6.0f};
+    float micMonitorGainDb{-60.0f};
+    float playbackLeakCompensation{0.6f};
+    float crowdCancelAdaptRate{0.0005f};
+    float crowdCancelRecoveryRate{0.00005f};
+    float crowdCancelClamp{1.0f};
+    float reverbTailMix{0.0928f};
+    float reverbTailSeconds{0.356f};
+    float timbreMatchStrength{1.0f};
+    float envelopeHoldMs{70.0f};
+    float envelopeReleaseMs{236.0f};
+    float envelopeReleaseMod{0.29f};
 };
 
 struct RuntimeConfig
@@ -63,3 +73,4 @@ private:
     RuntimeConfig applyOverrides(const RuntimeConfig& baseConfig, const juce::var& overrides, const juce::File& parentDirectory) const;
 };
 } // namespace singwithme::config
+

@@ -294,3 +294,21 @@
   background: rgba(107, 255, 107, 0.3);
 }
 
+
+.sample-credit {
+  margin-top: 1rem;
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(148, 163, 184, 0.8);
+}
+
+.sample-credit a {
+  color: #60a5fa;
+  text-decoration: none;
+}
+
+.sample-credit a:hover {
+  text-decoration: underline;
+}
+

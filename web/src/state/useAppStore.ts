@@ -14,8 +14,8 @@ export interface TrackUrls {
   guideUrl: string | null;
 }
 
-const defaultInstrumentUrl = import.meta.env.VITE_INSTRUMENT_URL ?? "/media/demo-instrument.wav";
-const defaultGuideUrl = import.meta.env.VITE_GUIDE_URL ?? "/media/demo-guide.wav";
+const defaultInstrumentUrl = import.meta.env.VITE_INSTRUMENT_URL ?? "/media/braykit-instrument.mp3";
+const defaultGuideUrl = import.meta.env.VITE_GUIDE_URL ?? "/media/braykit-guide.mp3";
 
 interface AppState {
   inputLevel: number;
@@ -91,3 +91,4 @@ export const useAppStore = create<AppState>((set) => ({
   setTimbreStrength: (timbreStrength) => set({ timbreStrength }),
   setPhraseSmoothness: (phraseSmoothness) => set({ phraseSmoothness })
 }));
+

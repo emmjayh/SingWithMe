@@ -47,6 +47,12 @@ export default function Home() {
         <section className="panel upload">
           <h2>Tracks</h2>
           <TrackUploader />
+          <p className="sample-credit">
+            Sample music provided by{" "}
+            <a href="https://www.youtube.com/channel/UCceiD3uFxa0vICmbU2hYYAg" target="_blank" rel="noreferrer">
+              Braykit
+            </a>
+          </p>
         </section>
         <section className="panel downloads">
           <h2>Get TuneTrix</h2>

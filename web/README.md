@@ -52,6 +52,7 @@ web/
 - Instrument stems bypass the gate; guide stems are multiplied by the gate envelope and the configured base gain.
 - Playback controls (play/pause/stop) drive the instrument/guide stems so engineers can audition ducking quickly.
 - Calibration captures 10 seconds of mic audio, persists results to `localStorage`, and updates the meter overlays.
+- The downloads panel presents an Android waitlist form that submits to `VITE_ANDROID_WAITLIST_URL` when defined, otherwise it falls back to opening `VITE_ANDROID_WAITLIST_MAILTO`.
 
 ## Railway Deployment
 - `server/index.ts` serves the Vite build and exposes `/healthz` (returns latency target).
@@ -59,6 +60,8 @@ web/
   - `PORT` (assigned by Railway)
   - `MODEL_PATH_VAD`, `MODEL_PATH_PITCH` (server-side copies if you host elsewhere)
   - `VITE_MODEL_PATH_VAD`, `VITE_MODEL_PATH_PITCH`, `VITE_INSTRUMENT_URL`, `VITE_GUIDE_URL`
+  - `VITE_ANDROID_WAITLIST_URL` (optional POST endpoint for Android waitlist submissions)
+  - `VITE_ANDROID_WAITLIST_MAILTO` (fallback mailto link if the endpoint is not defined)
   - `LATENCY_TARGET_MS` / `VITE_LATENCY_TARGET_MS`
 - Use persistent storage only for lightweight logs; stream stems/models from static hosting or Railway assets.
 

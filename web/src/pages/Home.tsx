@@ -6,6 +6,7 @@ import { CalibrationWizard } from "@components/CalibrationWizard";
 import { MetersPanel } from "@components/MetersPanel";
 import { TrackUploader } from "@components/TrackUploader";
 import { TuningControls } from "@components/TuningControls";
+import { AndroidWaitlistForm } from "@components/AndroidWaitlistForm";
 import { audioEngine } from "@audio/index";
 import "./Home.css";
 
@@ -57,18 +58,7 @@ export default function Home() {
         <section className="panel downloads">
           <h2>Get TuneTrix</h2>
           <div className="download-button-group">
-            <a
-              className="download-button"
-              href="https://play.google.com/apps/test/com.tunetrix.mobile/2"
-              target="_blank"
-              rel="noreferrer"
-            >
-              <img src="/assets/TuneTrixIcon-32.png" alt="TuneTrix icon" />
-              <div>
-                <span className="download-label">Download on</span>
-                <span className="download-destination">Google Play</span>
-              </div>
-            </a>
+            <AndroidWaitlistForm />
             <a
               className="download-button"
               href="https://buy.stripe.com/4gM28sfkj4YfafodWK87K00"

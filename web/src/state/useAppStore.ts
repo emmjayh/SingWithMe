@@ -16,8 +16,8 @@ export interface TrackUrls {
 
 const defaultInstrumentUrl = import.meta.env.VITE_INSTRUMENT_URL ?? "/media/braykit-instrument.mp3";
 const defaultGuideUrl = import.meta.env.VITE_GUIDE_URL ?? "/media/braykit-guide.mp3";
-const sampleInstrumentUrl = "/media/demo-instrument.wav";
-const sampleGuideUrl = "/media/demo-guide.wav";
+const sampleInstrumentUrl = "/media/demo-instrument.mp3";
+const sampleGuideUrl = "/media/demo-guide.mp3";
 
 interface AppState {
   inputLevel: number;

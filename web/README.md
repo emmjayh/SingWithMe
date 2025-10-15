@@ -44,7 +44,7 @@ web/
 
 ## Media & Models
 - Place show stems under `web/public/media/` (e.g., `instrument.mp3`, `guide.mp3`). They are ignored by git but can be addressed via `VITE_INSTRUMENT_URL` / `VITE_GUIDE_URL`.
-- A 30-second demo pair (`demo-instrument.wav`, `demo-guide.wav`) ships in `public/media/` so users can audition the gate immediately.
+- A 30-second demo pair (`demo-instrument.mp3`, `demo-guide.mp3`) ships in `public/media/` so users can audition the gate immediately.
 - ONNX models live in `web/public/models/` (`vad.onnx`, `crepe_tiny.onnx`). Update env vars `VITE_MODEL_PATH_VAD` / `VITE_MODEL_PATH_PITCH` if you host elsewhere.
 
 ## Runtime Behaviour

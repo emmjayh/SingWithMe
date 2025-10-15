@@ -48,6 +48,35 @@ export default function Home() {
           <h2>Tracks</h2>
           <TrackUploader />
         </section>
+        <section className="panel downloads">
+          <h2>Get TuneTrix</h2>
+          <div className="download-button-group">
+            <a
+              className="download-button"
+              href="https://play.google.com/store/apps/details?id=com.tunetrix.mobile"
+              target="_blank"
+              rel="noreferrer"
+            >
+              <img src="/assets/TuneTrixIcon-32.png" alt="TuneTrix icon" />
+              <div>
+                <span className="download-label">Download on</span>
+                <span className="download-destination">Google Play</span>
+              </div>
+            </a>
+            <a
+              className="download-button"
+              href="https://github.com/emmjayh/SingWithMe/releases/latest"
+              target="_blank"
+              rel="noreferrer"
+            >
+              <img src="/assets/TuneTrixIcon-32.png" alt="TuneTrix icon" />
+              <div>
+                <span className="download-label">Download for</span>
+                <span className="download-destination">Windows PC</span>
+              </div>
+            </a>
+          </div>
+        </section>
       </main>
       <footer className="app-footer">
         <a href="/privacy.html" target="_blank" rel="noreferrer">

@@ -5,3 +5,10 @@ web/public/media/*
 
 web/node_modules
 web/dist
+
+# Android signing artifacts (do not commit secrets)
+android/keystore.properties
+android/signing/
+*.keystore
+
+

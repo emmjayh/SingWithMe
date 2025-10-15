@@ -349,6 +349,10 @@ class AudioEngine {
     this.vocalBusNode.connect(this.audioContext.destination);
 
     this.micGainNode.connect(this.audioContext.destination);
+
+    if (this.workletNode) {
+      this.workletNode.port.postMessage({ type: "reset", value: this.currentGain });
+    }
   }
 
   private async loadModels() {

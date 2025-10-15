@@ -21,7 +21,7 @@ const ticketTtlMs = Number(process.env.DOWNLOAD_TOKEN_TTL_MS ?? 5 * 60 * 1000);
 const stripeSecret = process.env.STRIPE_SECRET_KEY;
 const stripe = stripeSecret
   ? new Stripe(stripeSecret, {
-    apiVersion: "2024-09-30",
+    apiVersion: "2024-06-20",
   })
   : null;
 

@@ -140,8 +140,12 @@ class AudioEngine {
   private streamSource: MediaStreamAudioSourceNode | null = null;
   private vadSession: ort.InferenceSession | null = null;
   private pitchSession: ort.InferenceSession | null = null;
-  private vadBuffer = new Float32Array(VAD_FRAME_SOURCE);
-  private pitchBuffer = new Float32Array(PITCH_FRAME_SOURCE);
+  private vadFrameSource = VAD_FRAME_SOURCE;
+  private pitchFrameSource = PITCH_FRAME_SOURCE;
+  private vadFrameTarget = VAD_FRAME_TARGET;
+  private pitchFrameTarget = PITCH_FRAME_TARGET;
+  private vadBuffer = new Float32Array(this.vadFrameSource);
+  private pitchBuffer = new Float32Array(this.pitchFrameSource);
   private vadOffset = 0;
   private pitchOffset = 0;
   private gate = new ConfidenceGate(defaultConfig.gate);
@@ -238,6 +242,7 @@ class AudioEngine {
     const trackState = useAppStore.getState();
     this.config.media.instrumentUrl = trackState.instrumentUrl ?? defaultConfig.media.instrumentUrl;
     this.config.media.guideUrl = trackState.guideUrl ?? defaultConfig.media.guideUrl;
+    this.updateFrameDimensions(this.config.sampleRate);
     this.gate.configure(this.config.sampleRate, this.config.bufferSamples, this.config.gate);
     this.currentGain = this.gate.currentGainLinear();
     this.instrumentBaseGain = dbToLinear(this.config.media.instrumentGainDb ?? 0);
@@ -290,6 +295,14 @@ class AudioEngine {
 
     await this.audioContext.resume().catch(() => undefined);
     await this.audioContext.audioWorklet.addModule(AUDIO_WORKLET_URL);
+
+    const actualSampleRate = this.audioContext.sampleRate;
+    this.updateFrameDimensions(actualSampleRate);
+    if (Math.abs(actualSampleRate - this.config.sampleRate) > 1) {
+      this.config.sampleRate = actualSampleRate;
+      this.gate.configure(this.config.sampleRate, this.config.bufferSamples, this.config.gate);
+      this.updateTimingCoefficients();
+    }
 
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: {
@@ -411,17 +424,22 @@ class AudioEngine {
     const token = ++this.guidePitchAnalysisToken;
     const channelCount = this.guideBuffer.numberOfChannels;
     const totalSamples = this.guideBuffer.length;
-    const hopSamples = this.config.bufferSamples;
+    const guideSampleRate = this.guideBuffer.sampleRate || this.config.sampleRate;
+    const hopSamples = Math.max(
+      1,
+      Math.round(guideSampleRate * (this.config.bufferSamples / this.config.sampleRate))
+    );
 
     if (totalSamples <= 0 || channelCount <= 0) {
       this.resetGuidePitchTrack();
       return;
     }
 
-    const effectiveLength = Math.max(totalSamples, PITCH_FRAME_SOURCE);
+    const frameSource = Math.max(this.pitchFrameTarget, Math.round(guideSampleRate * 0.064));
+    const effectiveLength = Math.max(totalSamples, frameSource);
     const frameCount = Math.max(
       1,
-      Math.ceil((effectiveLength - PITCH_FRAME_SOURCE) / hopSamples) + 1
+      Math.ceil((effectiveLength - frameSource) / hopSamples) + 1
     );
 
     const track = new Float32Array(frameCount);
@@ -431,11 +449,11 @@ class AudioEngine {
       channelData.push(this.guideBuffer.getChannelData(channel));
     }
 
-    const frame = new Float32Array(PITCH_FRAME_SOURCE);
+    const frame = new Float32Array(frameSource);
 
     for (let frameIndex = 0; frameIndex < frameCount; frameIndex += 1) {
       const start = frameIndex * hopSamples;
-      for (let i = 0; i < PITCH_FRAME_SOURCE; i += 1) {
+      for (let i = 0; i < frameSource; i += 1) {
         const sampleIndex = start + i;
         if (sampleIndex < totalSamples) {
           let sample = 0;
@@ -448,7 +466,7 @@ class AudioEngine {
         }
       }
 
-      const downsampled = this.downsampleFrame(frame, PITCH_FRAME_TARGET);
+      const downsampled = this.downsampleFrame(frame, this.pitchFrameTarget);
       const result = await this.inferPitch(downsampled);
 
       if (token !== this.guidePitchAnalysisToken) {
@@ -511,6 +529,22 @@ class AudioEngine {
     const holdMs = Math.max(10, this.envelopeHoldMs);
     this.guideReleaseHoldSamples = Math.max(1, Math.round((sampleRate * holdMs) / 1000));
     this.noiseGateHoldSamples = Math.max(1, Math.round((sampleRate * NOISE_GATE_HOLD_MS) / 1000));
+  }
+
+  private updateFrameDimensions(sampleRate: number) {
+    const targetVad = Math.max(this.vadFrameTarget, Math.round(sampleRate * 0.01));
+    if (targetVad !== this.vadFrameSource) {
+      this.vadFrameSource = targetVad;
+      this.vadBuffer = new Float32Array(this.vadFrameSource);
+      this.vadOffset = 0;
+    }
+
+    const targetPitch = Math.max(this.pitchFrameTarget, Math.round(sampleRate * 0.064));
+    if (targetPitch !== this.pitchFrameSource) {
+      this.pitchFrameSource = targetPitch;
+      this.pitchBuffer = new Float32Array(this.pitchFrameSource);
+      this.pitchOffset = 0;
+    }
   }
 
   private updateReverbCoefficients(tailSeconds: number) {
@@ -1106,14 +1140,14 @@ class AudioEngine {
       this.timbreTilt = clamp(this.timbreTilt, -1, 1);
 
       this.vadBuffer[this.vadOffset++] = sample;
-      if (this.vadOffset === VAD_FRAME_SOURCE) {
-        vadJobs.push(this.downsampleFrame(this.vadBuffer, VAD_FRAME_TARGET));
+      if (this.vadOffset === this.vadFrameSource) {
+        vadJobs.push(this.downsampleFrame(this.vadBuffer, this.vadFrameTarget));
         this.vadOffset = 0;
       }
 
       this.pitchBuffer[this.pitchOffset++] = sample;
-      if (this.pitchOffset === PITCH_FRAME_SOURCE) {
-        pitchJobs.push(this.downsampleFrame(this.pitchBuffer, PITCH_FRAME_TARGET));
+      if (this.pitchOffset === this.pitchFrameSource) {
+        pitchJobs.push(this.downsampleFrame(this.pitchBuffer, this.pitchFrameTarget));
         this.pitchOffset = 0;
       }
 
@@ -1166,12 +1200,12 @@ class AudioEngine {
   }
 
   private prepareVadFrame(frame: Float32Array) {
-    if (frame.length === VAD_FRAME_TARGET) {
+    if (frame.length === this.vadFrameTarget) {
       return frame;
     }
 
-    const normalized = new Float32Array(VAD_FRAME_TARGET);
-    const copyLength = Math.min(frame.length, VAD_FRAME_TARGET);
+    const normalized = new Float32Array(this.vadFrameTarget);
+    const copyLength = Math.min(frame.length, this.vadFrameTarget);
     for (let i = 0; i < copyLength; i += 1) {
       normalized[i] = frame[i];
     }
@@ -1182,7 +1216,7 @@ class AudioEngine {
   private async evaluateVad(frame: Float32Array) {
     if (!this.vadSession || this.vadFailed) return;
     this.lastVadFrameLength = frame.length;
-    if (frame.length !== VAD_FRAME_TARGET) {
+    if (frame.length !== this.vadFrameTarget) {
       if (!this.vadShapeWarningLogged) {
         this.vadShapeWarningLogged = true;
         // eslint-disable-next-line no-console

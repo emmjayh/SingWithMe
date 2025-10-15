@@ -4,6 +4,7 @@ import multer from "multer";
 import fs from "node:fs";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "url";
+import Stripe from "stripe";
 
 const app = express();
 const port = process.env.PORT || 8080;
@@ -11,8 +12,24 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const distDir = path.resolve(__dirname, "..", "dist");
 const uploadDir = path.resolve(__dirname, "..", "uploads");
+const fulfillmentPath = process.env.FULFILLMENT_FILE_PATH
+  ? path.resolve(process.env.FULFILLMENT_FILE_PATH)
+  : null;
+const downloadTickets = new Map<string, { expires: number }>();
+const ticketTtlMs = Number(process.env.DOWNLOAD_TOKEN_TTL_MS ?? 5 * 60 * 1000);
+
+const stripeSecret = process.env.STRIPE_SECRET_KEY;
+const stripe = stripeSecret
+  ? new Stripe(stripeSecret, {
+    apiVersion: "2024-09-30",
+  })
+  : null;
 
 fs.mkdirSync(uploadDir, { recursive: true });
+if (fulfillmentPath && !fs.existsSync(fulfillmentPath)) {
+  // eslint-disable-next-line no-console
+  console.warn(`Fulfillment file not found at ${fulfillmentPath}. Download endpoint will error until it is provided.`);
+}
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, uploadDir),
@@ -35,10 +52,85 @@ const upload = multer({
 app.use(express.static(distDir));
 app.use("/uploads", express.static(uploadDir));
 
+function cleanupTickets() {
+  const now = Date.now();
+  for (const [token, meta] of downloadTickets.entries()) {
+    if (meta.expires <= now) {
+      downloadTickets.delete(token);
+    }
+  }
+}
+
 app.get("/healthz", (_req, res) => {
   res.json({
     status: "ok",
     latencyTargetMs: Number(process.env.LATENCY_TARGET_MS ?? "25"),
+  });
+});
+
+app.get("/api/download-ticket", async (req, res) => {
+  cleanupTickets();
+
+  const sessionId = req.query.session_id;
+  if (typeof sessionId !== "string" || sessionId.trim().length === 0) {
+    return res.status(400).json({ error: "Missing session_id query parameter." });
+  }
+  if (!stripe) {
+    return res.status(500).json({ error: "Stripe secret key not configured on server." });
+  }
+  if (!fulfillmentPath || !fs.existsSync(fulfillmentPath)) {
+    return res.status(500).json({ error: "Fulfillment asset is not available. Please contact support." });
+  }
+
+  try {
+    const session = await stripe.checkout.sessions.retrieve(sessionId, {
+      expand: ["customer", "customer_details"],
+    });
+
+    if (!session || session.payment_status !== "paid") {
+      return res.status(403).json({ error: "Payment is not completed for this session." });
+    }
+
+    const token = randomUUID();
+    downloadTickets.set(token, { expires: Date.now() + ticketTtlMs });
+
+    return res.json({
+      downloadUrl: `/api/download/${token}`,
+      expiresInMs: ticketTtlMs,
+      session: {
+        email: session.customer_details?.email ?? session.customer_email ?? null,
+        amountTotal: session.amount_total,
+        currency: session.currency,
+      },
+    });
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error("Failed to verify checkout session", error);
+    return res.status(500).json({ error: "Unable to verify purchase. Please contact support with your receipt." });
+  }
+});
+
+app.get("/api/download/:token", (req, res) => {
+  cleanupTickets();
+  const token = req.params.token;
+  const ticket = downloadTickets.get(token);
+
+  if (!ticket) {
+    return res.status(410).json({ error: "This download link has expired. Please refresh the page to request a new one." });
+  }
+
+  if (!fulfillmentPath || !fs.existsSync(fulfillmentPath)) {
+    downloadTickets.delete(token);
+    return res.status(500).json({ error: "Fulfillment asset is not available. Please contact support." });
+  }
+
+  downloadTickets.delete(token);
+  res.download(fulfillmentPath, path.basename(fulfillmentPath), (err) => {
+    if (err) {
+      // eslint-disable-next-line no-console
+      console.error("Failed to send download", err);
+      res.status(500).end();
+    }
   });
 });
 
@@ -66,6 +158,6 @@ app.get("/*", (_req, res) => {
 
 app.listen(port, () => {
   // eslint-disable-next-line no-console
-  console.log(`SingWithMe web prototype listening on port ${port}`);
+  console.log(`TuneTrix web prototype listening on port ${port}`);
 });
 

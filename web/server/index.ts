@@ -54,11 +54,11 @@ app.use("/uploads", express.static(uploadDir));
 
 function cleanupTickets() {
   const now = Date.now();
-  for (const [token, meta] of downloadTickets.entries()) {
+  downloadTickets.forEach((meta, token) => {
     if (meta.expires <= now) {
       downloadTickets.delete(token);
     }
-  }
+  });
 }
 
 app.get("/healthz", (_req, res) => {

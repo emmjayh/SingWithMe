@@ -4,6 +4,13 @@
 
 namespace singwithme::dsp
 {
+enum class ManualMode
+{
+    Auto,
+    AlwaysOn,
+    AlwaysOff
+};
+
 struct GateConfig
 {
     float lookAheadMs{10.0f};
@@ -21,7 +28,8 @@ class ConfidenceGate
 {
 public:
     void configure(float sampleRate, size_t blockSize, GateConfig config);
-    void setManualMode(bool alwaysOn, bool alwaysOff);
+    void setManualMode(ManualMode mode);
+    ManualMode manualMode() const noexcept { return manualMode_; }
     float update(float confidence, float vad, float pitch);
     float currentGainDb() const noexcept { return gainDb_; }
 
@@ -34,7 +42,6 @@ private:
     float holdTimerMs_{0.0f};
     int consecutiveOn_{0};
     int consecutiveOff_{0};
-    bool manualAlwaysOn_{false};
-    bool manualAlwaysOff_{false};
+    ManualMode manualMode_{ManualMode::Auto};
 };
 } // namespace singwithme::dsp

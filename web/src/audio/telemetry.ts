@@ -28,7 +28,7 @@ export class TelemetryLog {
     return blob;
   }
 
-  download(filename = "singwithme-telemetry.json") {
+  download(filename = "tunetrix-telemetry.json") {
     const blob = this.export();
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");

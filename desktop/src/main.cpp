@@ -1,6 +1,8 @@
 #include <juce_gui_extra/juce_gui_extra.h>
 
-#include <onnxruntime_cxx_api.h>
+#if TUNETRIX_ONNX_RUNTIME
+ #include <onnxruntime_cxx_api.h>
+#endif
 
 #include "audio/DeviceManager.h"
 #include "audio/PipelineProcessor.h"
@@ -10,7 +12,6 @@
 #include "dsp/PitchProcessor.h"
 #include "dsp/VadProcessor.h"
 #include "ui/MainWindow.h"
-
 namespace
 {
 singwithme::dsp::GateConfig makeGateConfig(const singwithme::config::GateParams& params)
@@ -27,33 +28,28 @@ singwithme::dsp::GateConfig makeGateConfig(const singwithme::config::GateParams&
     gateCfg.duckDb = params.duckDb;
     return gateCfg;
 }
-
-class SingWithMeApplication : public juce::JUCEApplication
+class TuneTrixApplication : public juce::JUCEApplication
 {
 public:
-    const juce::String getApplicationName() override { return "SingWithMe"; }
+    const juce::String getApplicationName() override { return "TuneTrix"; }
     const juce::String getApplicationVersion() override { return "0.1.0"; }
     bool moreThanOneInstanceAllowed() override { return true; }
-
     void initialise(const juce::String&) override
     {
-        const juce::String configPath = juce::SystemStats::getEnvironmentVariable("SINGWITHME_CONFIG", "configs/defaults.json");
+        const juce::String configPath = juce::SystemStats::getEnvironmentVariable("TUNETRIX_CONFIG", "configs/defaults.json");
         runtimeConfig_ = configLoader_.loadFromFile(configPath.toStdString());
-
         deviceManager_.initialise(runtimeConfig_.sampleRate, runtimeConfig_.bufferSamples);
-
         vad_ = std::make_unique<singwithme::dsp::VadProcessor>(ortEnv_);
         vad_->loadModel(runtimeConfig_.vadModelPath);
-
         pitch_ = std::make_unique<singwithme::dsp::PitchProcessor>(ortEnv_);
         pitch_->loadModel(runtimeConfig_.pitchModelPath);
-
         pipelineProcessor_.configure(runtimeConfig_, gate_, *vad_, *pitch_, calibrator_);
         deviceManager_.manager().addAudioCallback(&pipelineProcessor_);
-
-        mainWindow_ = std::make_unique<singwithme::ui::MainWindow>();
+        mainWindow_ = std::make_unique<singwithme::ui::MainWindow>(
+            pipelineProcessor_,
+            deviceManager_,
+            [this](int newBufferSize) { return applyBufferSize(newBufferSize); });
     }
-
     void shutdown() override
     {
         deviceManager_.manager().removeAudioCallback(&pipelineProcessor_);
@@ -62,19 +58,33 @@ public:
         vad_.reset();
         deviceManager_.shutdown();
     }
-
     void systemRequestedQuit() override
     {
         quit();
     }
-
     void anotherInstanceStarted(const juce::String&) override {}
-
 private:
+    bool applyBufferSize(int bufferSamples)
+    {
+        if (!deviceManager_.setBufferSize(bufferSamples))
+        {
+            return false;
+        }
+
+        const int appliedBuffer = deviceManager_.bufferSize();
+        runtimeConfig_.bufferSamples = appliedBuffer;
+        pipelineProcessor_.updateBufferSize(appliedBuffer);
+        return true;
+    }
+
     std::unique_ptr<singwithme::ui::MainWindow> mainWindow_;
     singwithme::audio::DeviceManager deviceManager_;
     singwithme::audio::PipelineProcessor pipelineProcessor_;
-    Ort::Env ortEnv_{ORT_LOGGING_LEVEL_WARNING, "SingWithMe"};
+#if TUNETRIX_ONNX_RUNTIME
+    Ort::Env ortEnv_{ORT_LOGGING_LEVEL_WARNING, "TuneTrix"};
+#else
+    Ort::Env ortEnv_{};
+#endif
     std::unique_ptr<singwithme::dsp::VadProcessor> vad_;
     std::unique_ptr<singwithme::dsp::PitchProcessor> pitch_;
     singwithme::dsp::ConfidenceGate gate_;
@@ -83,5 +93,4 @@ private:
     singwithme::calibration::Calibrator calibrator_;
 };
 } // namespace
-
-START_JUCE_APPLICATION(SingWithMeApplication)
+START_JUCE_APPLICATION(TuneTrixApplication)

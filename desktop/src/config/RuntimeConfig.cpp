@@ -168,6 +168,16 @@ RuntimeConfig ConfigLoader::applyOverrides(const RuntimeConfig& baseConfig, cons
                 config.media.instrumentGainDb = getFloat(*media, "instrumentGainDb", config.media.instrumentGainDb);
                 config.media.guideGainDb = getFloat(*media, "guideGainDb", config.media.guideGainDb);
                 config.media.micMonitorGainDb = getFloat(*media, "micMonitorGainDb", config.media.micMonitorGainDb);
+                config.media.playbackLeakCompensation = getFloat(*media, "playbackLeakCompensation", config.media.playbackLeakCompensation);
+                config.media.crowdCancelAdaptRate = getFloat(*media, "crowdCancelAdaptRate", config.media.crowdCancelAdaptRate);
+                config.media.crowdCancelRecoveryRate = getFloat(*media, "crowdCancelRecoveryRate", config.media.crowdCancelRecoveryRate);
+                config.media.crowdCancelClamp = getFloat(*media, "crowdCancelClamp", config.media.crowdCancelClamp);
+                config.media.reverbTailMix = getFloat(*media, "reverbTailMix", config.media.reverbTailMix);
+                config.media.reverbTailSeconds = getFloat(*media, "reverbTailSeconds", config.media.reverbTailSeconds);
+                config.media.timbreMatchStrength = getFloat(*media, "timbreMatchStrength", config.media.timbreMatchStrength);
+                config.media.envelopeHoldMs = getFloat(*media, "envelopeHoldMs", config.media.envelopeHoldMs);
+                config.media.envelopeReleaseMs = getFloat(*media, "envelopeReleaseMs", config.media.envelopeReleaseMs);
+                config.media.envelopeReleaseMod = getFloat(*media, "envelopeReleaseMod", config.media.envelopeReleaseMod);
             }
         }
     }

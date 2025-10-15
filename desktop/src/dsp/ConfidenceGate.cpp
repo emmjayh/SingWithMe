@@ -23,10 +23,9 @@ void ConfidenceGate::configure(float sampleRate, size_t blockSize, GateConfig co
     consecutiveOff_ = 0;
 }
 
-void ConfidenceGate::setManualMode(bool alwaysOn, bool alwaysOff)
+void ConfidenceGate::setManualMode(ManualMode mode)
 {
-    manualAlwaysOn_ = alwaysOn;
-    manualAlwaysOff_ = alwaysOff;
+    manualMode_ = mode;
 }
 
 float ConfidenceGate::update(float confidence, float vad, float pitch)
@@ -34,11 +33,11 @@ float ConfidenceGate::update(float confidence, float vad, float pitch)
     (void)vad;
     (void)pitch;
 
-    if (manualAlwaysOn_)
+    if (manualMode_ == ManualMode::AlwaysOn)
     {
         targetDb_ = kZeroDb;
     }
-    else if (manualAlwaysOff_)
+    else if (manualMode_ == ManualMode::AlwaysOff)
     {
         targetDb_ = config_.duckDb;
     }

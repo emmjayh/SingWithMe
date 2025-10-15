@@ -1,5 +1,7 @@
 #include "dsp/PitchProcessor.h"
 
+#if TUNETRIX_ONNX_RUNTIME
+
 #include <algorithm>
 #include <array>
 #include <stdexcept>
@@ -67,3 +69,70 @@ float PitchProcessor::processHop(const float* samples, size_t sampleCount)
     return *std::max_element(probabilities_.begin(), probabilities_.end());
 }
 } // namespace singwithme::dsp
+
+#else
+
+#include <algorithm>
+#include <cmath>
+
+namespace singwithme::dsp
+{
+namespace
+{
+constexpr float kSampleRate = 16000.0f;
+constexpr float kMinFrequency = 80.0f;
+constexpr float kMaxFrequency = 500.0f;
+constexpr float kSmoothing = 0.4f;
+} // namespace
+
+float PitchProcessor::processHop(const float* samples, size_t sampleCount)
+{
+    if (samples == nullptr || sampleCount == 0)
+    {
+        return 0.0f;
+    }
+
+    float sumSquares = 0.0f;
+    for (size_t i = 0; i < sampleCount; ++i)
+    {
+        sumSquares += samples[i] * samples[i];
+    }
+
+    if (sumSquares <= 1.0e-8f)
+    {
+        smoothedConfidence_ *= 0.5f;
+        return smoothedConfidence_;
+    }
+
+    const float meanSquare = sumSquares / static_cast<float>(sampleCount);
+    const int minLag = static_cast<int>(std::floor(kSampleRate / kMaxFrequency));
+    const int maxLag = std::min(static_cast<int>(std::ceil(kSampleRate / kMinFrequency)),
+                                static_cast<int>(sampleCount) - 1);
+
+    float bestCorrelation = 0.0f;
+    for (int lag = minLag; lag <= maxLag; ++lag)
+    {
+        const float corr = estimateAutocorrelation(samples, sampleCount, lag);
+        const float normalised = corr / (meanSquare + 1.0e-8f);
+        bestCorrelation = std::max(bestCorrelation, normalised);
+    }
+
+    const float confidence = std::clamp(bestCorrelation, 0.0f, 1.0f);
+    smoothedConfidence_ = (kSmoothing * confidence) + ((1.0f - kSmoothing) * smoothedConfidence_);
+    return smoothedConfidence_;
+}
+
+float PitchProcessor::estimateAutocorrelation(const float* samples, size_t sampleCount, int lag)
+{
+    float correlation = 0.0f;
+    const size_t limit = sampleCount - static_cast<size_t>(lag);
+    for (size_t i = 0; i < limit; ++i)
+    {
+        correlation += samples[i] * samples[i + static_cast<size_t>(lag)];
+    }
+
+    return correlation / static_cast<float>(limit);
+}
+} // namespace singwithme::dsp
+
+#endif

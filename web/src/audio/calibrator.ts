@@ -47,12 +47,12 @@ export class Calibrator {
     };
   }
 
-  store(key = "singwithme-calibration") {
+  store(key = "tunetrix-calibration") {
     const data = this.result();
     localStorage.setItem(key, JSON.stringify({ ...data, timestamp: Date.now() }));
   }
 
-  load(key = "singwithme-calibration"): CalibrationResult | null {
+  load(key = "tunetrix-calibration"): CalibrationResult | null {
     const raw = localStorage.getItem(key);
     if (!raw) return null;
     try {

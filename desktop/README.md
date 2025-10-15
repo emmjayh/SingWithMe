@@ -63,16 +63,16 @@ cmake -S desktop -B build/desktop -G "Visual Studio 17 2022" ^
 cmake --build build/desktop --config Release
 
 # Run
-build/desktop/Release/SingWithMeApp.exe
+build/desktop/Release/TuneTrixApp.exe
 ```
 
 ## Packaging
 - **Windows**: Use `cmake --build build/desktop --target PACKAGE` to emit WiX/NSIS scripts, or run `scripts/package_windows.ps1` after build.
-- **macOS**: `cmake --build build/desktop --target SingWithMeApp` then package with `scripts/package_macos.sh` (creates signed `.dmg`).
+- **macOS**: `cmake --build build/desktop --target TuneTrixApp` then package with `scripts/package_macos.sh` (creates signed `.dmg`).
 - Bundle `models/*.onnx`, `configs/*.json`, and show stems from `assets/audio/` beside the executable.
 
 ## Operational Notes
 - The pipeline expects 48 kHz I/O. Audio for VAD/pitch is downsampled to 16 kHz before hitting the ONNX models (Silero VAD + CREPE tiny export).
 - Instrument and guide stems are loaded from `configs/*.json` (`media.instrumentPath`, `media.guidePath`). Provide your own WAV/MP3 files under `assets/audio/` (git-ignored) or update the config paths.
 - Confidence gating drives the guide stem only; instrument playback stays full scale. Manual override and calibration hooks are surfaced via the UI scaffolding in `ui/MainWindow.cpp`.
-- Override the config at runtime by setting `SINGWITHME_CONFIG` to a different JSON preset (e.g., `configs/desktop/stage.json`).
+- Override the config at runtime by setting `TUNETRIX_CONFIG` to a different JSON preset (e.g., `configs/desktop/stage.json`).

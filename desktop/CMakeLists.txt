@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(SingWithMeDesktop VERSION 0.1.0 LANGUAGES CXX)
+project(TuneTrixDesktop VERSION 0.1.0 LANGUAGES C CXX)
 
 option(ENABLE_ASIO "Enable ASIO support on Windows" ON)
 option(ENABLE_GPU "Enable GPU acceleration for ONNX Runtime" OFF)

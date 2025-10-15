@@ -1,30 +1,28 @@
 #include "ui/MainWindow.h"
 
+#include "ui/MainComponent.h"
+
+#include <utility>
+
 namespace singwithme::ui
 {
-namespace
-{
-class PlaceholderComponent : public juce::Component
-{
-public:
-    void paint(juce::Graphics& g) override
-    {
-        g.fillAll(juce::Colour(0xFF121212));
-        g.setColour(juce::Colours::white);
-        g.setFont(18.0f);
-        g.drawFittedText("SingWithMe UI Placeholder", getLocalBounds(), juce::Justification::centred, 1);
-    }
-};
-} // namespace
 
-MainWindow::MainWindow()
-    : juce::DocumentWindow("SingWithMe",
+MainWindow::MainWindow(audio::PipelineProcessor& pipeline,
+                       audio::DeviceManager& deviceManager,
+                       std::function<bool(int)> onBufferSizeChanged)
+    : juce::DocumentWindow("TuneTrix",
                            juce::Colour(0xFF1A1A1A),
                            juce::DocumentWindow::allButtons)
 {
-    setContentOwned(new PlaceholderComponent(), true);
-    setResizable(true, false);
-    centreWithSize(900, 600);
+    setUsingNativeTitleBar(true);
+    setContentOwned(new MainComponent(pipeline, deviceManager, std::move(onBufferSizeChanged)), true);
+    setResizeLimits(1080, 780, 1920, 1200);
+    setResizable(true, true);
+    centreWithSize(1280, 900);
+    if (auto* mainComponent = dynamic_cast<MainComponent*>(getContentComponent()))
+    {
+        mainComponent->grabKeyboardFocus();
+    }
     setVisible(true);
 }
 

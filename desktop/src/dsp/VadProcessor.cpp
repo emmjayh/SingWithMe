@@ -1,5 +1,9 @@
 #include "dsp/VadProcessor.h"
 
+#if TUNETRIX_ONNX_RUNTIME
+
+#include <algorithm>
+#include <array>
 #include <stdexcept>
 
 namespace singwithme::dsp
@@ -109,3 +113,74 @@ float VadProcessor::runModel(const float* downsampled, size_t sampleCount)
     return probability;
 }
 } // namespace singwithme::dsp
+
+#else
+
+#include <algorithm>
+#include <cmath>
+
+namespace singwithme::dsp
+{
+namespace
+{
+constexpr float kMinFloor = 1.0e-7f;
+constexpr float kNoiseAdaptFast = 0.02f;
+constexpr float kNoiseAdaptSlow = 0.002f;
+constexpr float kSmoothing = 0.45f;
+constexpr float kLogisticSlope = 0.9f;
+constexpr float kLogisticOffsetDb = -1.5f;
+constexpr float kLevelFloorDb = -80.0f;
+constexpr float kLevelCeilDb = -30.0f;
+} // namespace
+
+void VadProcessor::setModelSampleRate(int64_t sampleRate)
+{
+    modelSampleRate_ = sampleRate;
+}
+
+void VadProcessor::resetState()
+{
+    noiseFloor_ = 1.0e-4f;
+    smoothedProbability_ = 0.0f;
+}
+
+float VadProcessor::processFrame(const float* samples, size_t sampleCount)
+{
+    if (samples == nullptr || sampleCount == 0)
+    {
+        return 0.0f;
+    }
+
+    const float frameEnergy = computeEnergy(samples, sampleCount);
+
+    const bool likelyNoise = frameEnergy <= noiseFloor_ * 1.5f;
+    const float adapt = likelyNoise ? kNoiseAdaptFast : kNoiseAdaptSlow;
+    noiseFloor_ = std::max(kMinFloor, ((1.0f - adapt) * noiseFloor_) + (adapt * frameEnergy));
+
+    const float snr = frameEnergy / std::max(noiseFloor_, kMinFloor);
+    const float snrDb = 10.0f * std::log10(std::max(snr, 1.0e-6f));
+    const float logisticProb = 1.0f / (1.0f + std::exp(-kLogisticSlope * (snrDb - kLogisticOffsetDb)));
+
+    const float rms = std::sqrt(frameEnergy);
+    const float rmsDb = 20.0f * std::log10(std::max(rms, 1.0e-6f));
+    const float levelProb = std::clamp((rmsDb - kLevelFloorDb) / (kLevelCeilDb - kLevelFloorDb), 0.0f, 1.0f);
+
+    const float probability = std::max(logisticProb, levelProb);
+
+    smoothedProbability_ = (kSmoothing * probability) + ((1.0f - kSmoothing) * smoothedProbability_);
+    return std::clamp(smoothedProbability_, 0.0f, 1.0f);
+}
+
+float VadProcessor::computeEnergy(const float* samples, size_t sampleCount)
+{
+    float sumSquares = 0.0f;
+    for (size_t i = 0; i < sampleCount; ++i)
+    {
+        sumSquares += samples[i] * samples[i];
+    }
+
+    return sumSquares / static_cast<float>(sampleCount);
+}
+} // namespace singwithme::dsp
+
+#endif

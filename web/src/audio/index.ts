@@ -8,8 +8,8 @@ import { shallow } from "zustand/shallow";
 
 const AUDIO_WORKLET_URL = "/worklets/confidence-gate.worklet.js";
 const SAMPLE_RATE_TARGET = 16000;
-const VAD_FRAME_SOURCE = 480; // 10 ms @ 48 kHz
-const VAD_FRAME_TARGET = 160; // 10 ms @ 16 kHz
+const VAD_FRAME_SOURCE = 672; // 14 ms @ 48 kHz (minimum window for Silero VAD)
+const VAD_FRAME_TARGET = 224; // 14 ms @ 16 kHz (minimum window for Silero VAD)
 const PITCH_FRAME_SOURCE = 3072; // 64 ms @ 48 kHz
 const PITCH_FRAME_TARGET = 1024; // 64 ms @ 16 kHz
 const MAX_QUEUE_LENGTH = 32;

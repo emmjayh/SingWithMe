@@ -1360,17 +1360,23 @@ class AudioEngine {
   private updateConfidence(rms?: number) {
     const weights = this.config.confidenceWeights;
     const energy = Number.isFinite(rms) ? Math.max(0, rms ?? 0) : 0;
-    const energyGate = clamp(energy / 0.01, 0, 1);
+    const ENERGY_SILENCE_FLOOR = 0.0005; // ~-66 dB
+    const ENERGY_FULL_SCALE = 0.02; // ~-34 dB
+    const energyGate = clamp((energy - ENERGY_SILENCE_FLOOR) / (ENERGY_FULL_SCALE - ENERGY_SILENCE_FLOOR), 0, 1);
 
-    if (energyGate <= 0.001) {
+    if (energyGate <= 0.01) {
       this.lastPitch = 0;
       this.lastPitchHz = 0;
+    } else if (energyGate < 0.2) {
+      this.lastPitch *= energyGate;
     }
 
-    let combined = weights.vad * this.lastVad + weights.pitch * this.lastPitch + weights.phraseAware * 0;
+    const vadComponent = this.lastVad * energyGate;
+    const pitchComponent = this.lastPitch * energyGate;
 
-    combined = Math.max(combined, this.lastVad);
-    combined *= energyGate;
+    let combined = weights.vad * vadComponent + weights.pitch * pitchComponent + weights.phraseAware * 0;
+
+    combined = Math.max(combined, vadComponent);
 
     this.lastConfidence = clamp(combined, 0, 1);
   }

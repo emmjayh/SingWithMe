@@ -53,7 +53,7 @@ export default function Home() {
           <div className="download-button-group">
             <a
               className="download-button"
-              href="https://play.google.com/store/apps/details?id=com.tunetrix.mobile"
+              href="https://play.google.com/apps/test/com.tunetrix.mobile/2"
               target="_blank"
               rel="noreferrer"
             >

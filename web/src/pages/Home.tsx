@@ -5,6 +5,7 @@ import { ModeToggle } from "@components/ModeToggle";
 import { CalibrationWizard } from "@components/CalibrationWizard";
 import { MetersPanel } from "@components/MetersPanel";
 import { TrackUploader } from "@components/TrackUploader";
+import { TuningControls } from "@components/TuningControls";
 import { audioEngine } from "@audio/index";
 import "./Home.css";
 
@@ -22,7 +23,7 @@ export default function Home() {
   return (
     <div className="app-shell">
       <header className="app-header">
-        <div className="brand">SingWithMe</div>
+        <div className="brand">TuneTrix</div>
         <LatencyBadge />
       </header>
       <main className="app-main">
@@ -38,6 +39,10 @@ export default function Home() {
         <section className="panel calibration">
           <h2>Calibration</h2>
           <CalibrationWizard />
+        </section>
+        <section className="panel tuning">
+          <h2>Enhancements</h2>
+          <TuningControls />
         </section>
         <section className="panel upload">
           <h2>Tracks</h2>

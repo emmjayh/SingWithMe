@@ -49,6 +49,66 @@
   gap: 1rem;
 }
 
+.tuning-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.tuning-slider {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 12px;
+  padding: 0.85rem 1rem;
+}
+
+.tuning-slider__label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #9ca3af;
+}
+
+.tuning-slider__label strong {
+  font-size: 0.85rem;
+  color: #f5f5f5;
+  letter-spacing: 0.06em;
+}
+
+.tuning-slider input[type="range"] {
+  appearance: none;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.35);
+  outline: none;
+}
+
+.tuning-slider input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #6bff6b;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.25);
+}
+
+.tuning-slider input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #6bff6b;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.25);
+}
+
 .track-uploader form {
   display: flex;
   flex-direction: column;

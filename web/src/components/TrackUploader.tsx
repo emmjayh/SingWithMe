@@ -27,6 +27,7 @@ export function TrackUploader() {
     () => !instrumentFile || !guideFile || status === "uploading",
     [instrumentFile, guideFile, status]
   );
+  const disableInputs = status === "uploading";
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -90,6 +91,7 @@ export function TrackUploader() {
           <input
             type="file"
             accept="audio/*"
+            disabled={disableInputs}
             onChange={(event) => setInstrumentFile(event.target.files?.[0] ?? null)}
           />
         </label>
@@ -99,6 +101,7 @@ export function TrackUploader() {
           <input
             type="file"
             accept="audio/*"
+            disabled={disableInputs}
             onChange={(event) => setGuideFile(event.target.files?.[0] ?? null)}
           />
         </label>
@@ -119,13 +122,25 @@ export function TrackUploader() {
       </form>
 
       <div className="playback-controls">
-        <button type="button" onClick={handlePlay} disabled={playbackState === "playing"}>
+        <button
+          type="button"
+          onClick={handlePlay}
+          disabled={playbackState === "playing" || disableInputs}
+        >
           Play
         </button>
-        <button type="button" onClick={handlePause} disabled={playbackState !== "playing"}>
+        <button
+          type="button"
+          onClick={handlePause}
+          disabled={playbackState !== "playing" || disableInputs}
+        >
           Pause
         </button>
-        <button type="button" onClick={handleStop} disabled={playbackState === "stopped"}>
+        <button
+          type="button"
+          onClick={handleStop}
+          disabled={playbackState === "stopped" || disableInputs}
+        >
           Stop
         </button>
       </div>

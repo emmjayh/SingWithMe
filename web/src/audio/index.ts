@@ -19,6 +19,32 @@ for (let i = 0; i < CREPE_CENTS_MAPPING.length; i += 1) {
   CREPE_CENTS_MAPPING[i] = 1997.3794084376191 + (7180 / 359) * i;
 }
 
+const GUIDE_FLOOR = 0.05;
+const STRENGTH_BLEND_BASE = 0.25;
+const STRENGTH_BLEND_SCALE = 0.75;
+const NOISE_GATE_RISE = 0.12;
+const NOISE_GATE_FALL = 0.004;
+const NOISE_GATE_HOLD_MS = 28;
+const GUIDE_RELEASE_MIN_MS = 10;
+const GUIDE_RELEASE_HOLD_MS = 48;
+const TIMBRE_LPF_MS = 24;
+const VOCAL_STRENGTH_RISE = 0.08;
+const VOCAL_STRENGTH_FALL = 0.02;
+const VOCAL_STRENGTH_SCALE = 12;
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function msToOnePoleCoeff(ms: number, sampleRate: number) {
+  if (ms <= 0 || sampleRate <= 0) {
+    return 1;
+  }
+  const seconds = ms / 1000;
+  const alpha = Math.exp(-1 / (sampleRate * seconds));
+  return 1 - alpha;
+}
+
 interface MediaConfig {
   instrumentUrl: string | null;
   guideUrl: string | null;
@@ -26,6 +52,16 @@ interface MediaConfig {
   instrumentGainDb: number;
   guideGainDb: number;
   micMonitorGainDb: number;
+  playbackLeakCompensation: number;
+  crowdCancelAdaptRate: number;
+  crowdCancelRecoveryRate: number;
+  crowdCancelClamp: number;
+  reverbTailMix: number;
+  reverbTailSeconds: number;
+  timbreMatchStrength: number;
+  envelopeHoldMs: number;
+  envelopeReleaseMs: number;
+  envelopeReleaseMod: number;
 }
 
 interface EngineConfig {
@@ -74,7 +110,17 @@ const defaultConfig: EngineConfig = {
     loop: true,
     instrumentGainDb: 0,
     guideGainDb: 0,
-    micMonitorGainDb: Number.NEGATIVE_INFINITY
+    micMonitorGainDb: Number.NEGATIVE_INFINITY,
+    playbackLeakCompensation: 0.6,
+    crowdCancelAdaptRate: 0.0005,
+    crowdCancelRecoveryRate: 0.00005,
+    crowdCancelClamp: 1,
+    reverbTailMix: 0.02,
+    reverbTailSeconds: 0.32,
+    timbreMatchStrength: 1,
+    envelopeHoldMs: 70,
+    envelopeReleaseMs: 236,
+    envelopeReleaseMod: 0.29
   },
   latencyTargetMs: Number(import.meta.env.VITE_LATENCY_TARGET_MS ?? 25)
 };
@@ -118,6 +164,54 @@ class AudioEngine {
   private guidePitchShifter: PitchShifter | null = null;
   private instrumentBaseGain = 1;
   private guideBaseGain = 1;
+  private instrumentChannels: Float32Array[] = [];
+  private guideChannels: Float32Array[] = [];
+  private instrumentLength = 0;
+  private guideLength = 0;
+  private playbackSampleCursor = 0;
+  private playbackLeakComp = 0.6;
+  private adaptiveLeakComp = 0.6;
+  private crowdCancelAdaptRate = 0.0005;
+  private crowdCancelRecoveryRate = 0.00005;
+  private crowdCancelClamp = 1;
+  private noiseFloorAmplitude = 0.22;
+  private vocalStrength = 0;
+  private noiseGateState = 0;
+  private noiseGateHoldSamples = 1;
+  private noiseGateHoldRemaining = 0;
+  private guideEnvelope = 0;
+  private guideReleaseHoldSamples = 1;
+  private guideReleaseHoldRemaining = 0;
+  private tailFollower = 0;
+  private tailRiseCoeff = 0.05;
+  private tailFallCoeff = 0.003;
+  private reverbTailMix = 0.02;
+  private reverbFeedback = 0.85;
+  private timbreMatchStrength = 1;
+  private timbreTilt = 0;
+  private brightnessLowEnv = 0;
+  private brightnessHighEnv = 0;
+  private lowpassCoeff = 0.1;
+  private envelopeAttackCoeff = 0.001;
+  private envelopeReleaseCoeff = 0.001;
+  private envelopeReleaseMod = 0.29;
+  private envelopeHoldMs = 70;
+  private envelopeReleaseMs = 236;
+  private micMonitorGainDb = Number.NEGATIVE_INFINITY;
+  private micMonitorLinear = 0;
+  private currentGuideMix = 0;
+  private currentTailMix = 0;
+  private lastGateDb = defaultConfig.gate.duckDb;
+  private limiterGain = 1;
+  private guideLowShelfNode: BiquadFilterNode | null = null;
+  private guideHighShelfNode: BiquadFilterNode | null = null;
+  private guidePreGainNode: GainNode | null = null;
+  private guideDryGainNode: GainNode | null = null;
+  private guideReverbInputNode: GainNode | null = null;
+  private guideReverbDelayNode: DelayNode | null = null;
+  private guideReverbFeedbackNode: GainNode | null = null;
+  private guideReverbMixNode: GainNode | null = null;
+  private guideSumNode: GainNode | null = null;
 
   private playbackOffset = 0;
   private playbackStartTime = 0;
@@ -135,6 +229,7 @@ class AudioEngine {
   private vadShapeWarningLogged = false;
   private lastVadFrameLength = 0;
   private vadFailed = false;
+  private settingUnsubs: Array<() => void> = [];
 
   async initialise() {
     if (this.initialised) return;
@@ -147,6 +242,22 @@ class AudioEngine {
     this.currentGain = this.gate.currentGainLinear();
     this.instrumentBaseGain = dbToLinear(this.config.media.instrumentGainDb ?? 0);
     this.guideBaseGain = dbToLinear(this.config.media.guideGainDb ?? 0);
+    this.micMonitorGainDb = this.config.media.micMonitorGainDb ?? Number.NEGATIVE_INFINITY;
+    this.micMonitorLinear = dbToLinear(this.micMonitorGainDb);
+    this.playbackLeakComp = clamp(this.config.media.playbackLeakCompensation ?? 0.6, 0, 1);
+    this.adaptiveLeakComp = this.playbackLeakComp;
+    this.crowdCancelAdaptRate = this.config.media.crowdCancelAdaptRate ?? 0.0005;
+    this.crowdCancelRecoveryRate = this.config.media.crowdCancelRecoveryRate ?? 0.00005;
+    this.crowdCancelClamp = this.config.media.crowdCancelClamp ?? 1;
+    this.reverbTailMix = this.config.media.reverbTailMix ?? 0.02;
+    this.envelopeHoldMs = this.config.media.envelopeHoldMs ?? 70;
+    this.envelopeReleaseMs = this.config.media.envelopeReleaseMs ?? 236;
+    this.envelopeReleaseMod = this.config.media.envelopeReleaseMod ?? 0.29;
+    this.timbreMatchStrength = this.config.media.timbreMatchStrength ?? 1;
+    this.noiseFloorAmplitude = trackState.noiseFloor ?? 0.22;
+    this.updateTimingCoefficients();
+    this.updateReverbCoefficients(this.config.media.reverbTailSeconds ?? 0.32);
+    this.resetDynamicsState(true);
     this.vadState.fill(0);
 
     await this.setupAudioGraph();
@@ -207,8 +318,7 @@ class AudioEngine {
     };
 
     this.micGainNode = this.audioContext.createGain();
-    const monitorGainLinear = dbToLinear(this.config.media.micMonitorGainDb ?? Number.NEGATIVE_INFINITY);
-    this.micGainNode.gain.value = monitorGainLinear;
+    this.micGainNode.gain.value = this.micMonitorLinear;
 
     this.streamSource.connect(this.workletNode);
     this.workletNode.connect(this.micGainNode);
@@ -261,6 +371,24 @@ class AudioEngine {
 
     this.instrumentBuffer = await fetchBuffer(instrumentUrl);
     this.guideBuffer = await fetchBuffer(guideUrl);
+
+    this.instrumentChannels = [];
+    if (this.instrumentBuffer) {
+      for (let channel = 0; channel < this.instrumentBuffer.numberOfChannels; channel += 1) {
+        this.instrumentChannels.push(this.instrumentBuffer.getChannelData(channel));
+      }
+    }
+    this.instrumentLength = this.instrumentBuffer?.length ?? 0;
+
+    this.guideChannels = [];
+    if (this.guideBuffer) {
+      for (let channel = 0; channel < this.guideBuffer.numberOfChannels; channel += 1) {
+        this.guideChannels.push(this.guideBuffer.getChannelData(channel));
+      }
+    }
+    this.guideLength = this.guideBuffer?.length ?? 0;
+    this.resetDynamicsState();
+    this.playbackSampleCursor = 0;
 
     if (this.pitchSession && this.guideBuffer) {
       await this.analyzeGuidePitch();
@@ -374,6 +502,274 @@ class AudioEngine {
     };
   }
 
+  private updateTimingCoefficients() {
+    const sampleRate = this.config.sampleRate;
+    this.lowpassCoeff = msToOnePoleCoeff(TIMBRE_LPF_MS, sampleRate);
+    this.envelopeAttackCoeff = msToOnePoleCoeff(20, sampleRate);
+    const releaseMs = Math.max(GUIDE_RELEASE_MIN_MS, this.envelopeReleaseMs);
+    this.envelopeReleaseCoeff = msToOnePoleCoeff(releaseMs, sampleRate);
+    const holdMs = Math.max(10, this.envelopeHoldMs);
+    this.guideReleaseHoldSamples = Math.max(1, Math.round((sampleRate * holdMs) / 1000));
+    this.noiseGateHoldSamples = Math.max(1, Math.round((sampleRate * NOISE_GATE_HOLD_MS) / 1000));
+  }
+
+  private updateReverbCoefficients(tailSeconds: number) {
+    const seconds = Math.max(0.05, tailSeconds);
+    const sampleRate = this.config.sampleRate;
+    const feedback = Math.exp(-1 / (sampleRate * seconds));
+    this.reverbFeedback = Math.min(feedback, 0.85);
+    const fall = 1 - Math.exp(-this.config.bufferSamples / (sampleRate * seconds * 8));
+    this.tailFallCoeff = clamp(fall, 0.0005, 0.2);
+  }
+
+  private resetDynamicsState(keepLeak = false) {
+    if (!keepLeak) {
+      this.adaptiveLeakComp = this.playbackLeakComp;
+    }
+    this.vocalStrength = 0;
+    this.noiseGateState = 0;
+    this.noiseGateHoldRemaining = 0;
+    this.guideEnvelope = 0;
+    this.guideReleaseHoldRemaining = 0;
+    this.tailFollower = 0;
+    this.timbreTilt = 0;
+    this.brightnessLowEnv = 0;
+    this.brightnessHighEnv = 0;
+    this.currentGuideMix = 0;
+    this.currentTailMix = 0;
+    this.lastGateDb = this.config.gate.duckDb;
+    this.limiterGain = 1;
+    this.applyGuideProcessing();
+  }
+
+  private applyGuideProcessing() {
+    if (!this.audioContext) {
+      return;
+    }
+    const now = this.audioContext.currentTime;
+    const dryGain = this.currentGuideMix * (1 - this.currentTailMix);
+
+    if (this.guidePreGainNode) {
+      this.guidePreGainNode.gain.setTargetAtTime(this.guideBaseGain, now, 0.01);
+    }
+    if (this.guideDryGainNode) {
+      this.guideDryGainNode.gain.setTargetAtTime(dryGain, now, 0.01);
+    }
+    if (this.guideReverbInputNode) {
+      this.guideReverbInputNode.gain.setTargetAtTime(this.currentGuideMix, now, 0.01);
+    }
+    if (this.guideReverbMixNode) {
+      this.guideReverbMixNode.gain.setTargetAtTime(this.currentTailMix, now, 0.02);
+    }
+    if (this.guideReverbFeedbackNode) {
+      this.guideReverbFeedbackNode.gain.setTargetAtTime(this.reverbFeedback, now, 0.05);
+    }
+
+    const tiltLow = clamp(1 - this.timbreTilt, 0.2, 2);
+    const tiltHigh = clamp(1 + this.timbreTilt, 0.2, 2.5);
+    const lowDb = 20 * Math.log10(tiltLow);
+    const highDb = 20 * Math.log10(tiltHigh);
+
+    if (this.guideLowShelfNode) {
+      this.guideLowShelfNode.gain.setTargetAtTime(lowDb, now, 0.05);
+    }
+    if (this.guideHighShelfNode) {
+      this.guideHighShelfNode.gain.setTargetAtTime(highDb, now, 0.05);
+    }
+  }
+
+  private applyNoiseFloor(amplitude: number) {
+    this.noiseFloorAmplitude = clamp(amplitude, 0, 0.6);
+  }
+
+  private applyMicMonitorGain(gainDb: number) {
+    const clamped = clamp(gainDb, -60, 6);
+    this.micMonitorGainDb = clamped;
+    this.micMonitorLinear = dbToLinear(clamped);
+    if (this.audioContext && this.micGainNode) {
+      this.micGainNode.gain.setTargetAtTime(this.micMonitorLinear, this.audioContext.currentTime, 0.02);
+    }
+  }
+
+  private applyCrowdCancelStrength(strength: number) {
+    const clamped = clamp(strength, 0, 1);
+    this.crowdCancelAdaptRate = 0.0001 + clamped * 0.0004;
+    this.crowdCancelRecoveryRate = 0.00005 + (1 - clamped) * 0.00025;
+    this.crowdCancelClamp = 0.6 + clamped * 0.4;
+  }
+
+  private applyReverbStrength(strength: number) {
+    const clamped = clamp(strength, 0, 1);
+    const mix = 0.02 + clamped * 0.28;
+    const seconds = 0.2 + clamped * 0.6;
+    this.reverbTailMix = mix;
+    this.updateReverbCoefficients(seconds);
+    this.applyGuideProcessing();
+  }
+
+  private applyTimbreStrength(strength: number) {
+    const clamped = clamp(strength, 0, 1);
+    this.timbreMatchStrength = 0.2 + clamped * 0.8;
+  }
+
+  private applyPhraseSmoothness(strength: number) {
+    const clamped = clamp(strength, 0, 1);
+    this.envelopeHoldMs = 60 + clamped * 90;
+    this.envelopeReleaseMs = 220 + clamped * 160;
+    this.envelopeReleaseMod = 0.25 + clamped * 0.4;
+    this.updateTimingCoefficients();
+  }
+
+  private buildGuideChain(destination: AudioNode) {
+    if (!this.audioContext || !this.guidePitchShifter) {
+      return;
+    }
+
+    this.teardownGuideChain();
+    const ctx = this.audioContext;
+
+    this.guideLowShelfNode = ctx.createBiquadFilter();
+    this.guideLowShelfNode.type = "lowshelf";
+    this.guideLowShelfNode.frequency.value = 380;
+    this.guideLowShelfNode.gain.value = 0;
+
+    this.guideHighShelfNode = ctx.createBiquadFilter();
+    this.guideHighShelfNode.type = "highshelf";
+    this.guideHighShelfNode.frequency.value = 2800;
+    this.guideHighShelfNode.gain.value = 0;
+
+    this.guidePreGainNode = ctx.createGain();
+    this.guidePreGainNode.gain.value = this.guideBaseGain;
+
+    this.guideDryGainNode = ctx.createGain();
+    this.guideDryGainNode.gain.value = 0;
+
+    this.guideReverbInputNode = ctx.createGain();
+    this.guideReverbInputNode.gain.value = 0;
+
+    this.guideReverbDelayNode = ctx.createDelay(1);
+    this.guideReverbDelayNode.delayTime.value = 0.055;
+
+    this.guideReverbFeedbackNode = ctx.createGain();
+    this.guideReverbFeedbackNode.gain.value = this.reverbFeedback;
+
+    this.guideReverbMixNode = ctx.createGain();
+    this.guideReverbMixNode.gain.value = 0;
+
+    this.guideSumNode = ctx.createGain();
+    this.guideSumNode.gain.value = 1;
+
+    this.guideGainNode = ctx.createGain();
+    this.guideGainNode.gain.value = 1;
+
+    this.guidePitchShifter.connect(this.guideLowShelfNode);
+    this.guideLowShelfNode.connect(this.guideHighShelfNode);
+    this.guideHighShelfNode.connect(this.guidePreGainNode);
+
+    this.guidePreGainNode.connect(this.guideDryGainNode);
+    this.guideDryGainNode.connect(this.guideSumNode);
+
+    this.guidePreGainNode.connect(this.guideReverbInputNode);
+    this.guideReverbInputNode.connect(this.guideReverbDelayNode);
+    this.guideReverbDelayNode.connect(this.guideReverbMixNode);
+    this.guideReverbMixNode.connect(this.guideSumNode);
+    this.guideReverbDelayNode.connect(this.guideReverbFeedbackNode);
+    this.guideReverbFeedbackNode.connect(this.guideReverbDelayNode);
+
+    this.guideSumNode.connect(this.guideGainNode);
+    this.guideGainNode.connect(destination);
+
+    this.applyGuideProcessing();
+  }
+
+  private teardownGuideChain() {
+    const nodes: Array<AudioNode | null> = [
+      this.guideLowShelfNode,
+      this.guideHighShelfNode,
+      this.guidePreGainNode,
+      this.guideDryGainNode,
+      this.guideReverbInputNode,
+      this.guideReverbDelayNode,
+      this.guideReverbFeedbackNode,
+      this.guideReverbMixNode,
+      this.guideSumNode,
+      this.guideGainNode
+    ];
+
+    for (const node of nodes) {
+      try {
+        node?.disconnect();
+      } catch {
+        /* ignore */
+      }
+    }
+
+    this.guideLowShelfNode = null;
+    this.guideHighShelfNode = null;
+    this.guidePreGainNode = null;
+    this.guideDryGainNode = null;
+    this.guideReverbInputNode = null;
+    this.guideReverbDelayNode = null;
+    this.guideReverbFeedbackNode = null;
+    this.guideReverbMixNode = null;
+    this.guideSumNode = null;
+    this.guideGainNode = null;
+  }
+
+  private updateGuideEnvelope(frameMax: number, playing: boolean) {
+    let desiredNoiseGate = frameMax > this.noiseFloorAmplitude ? 1 : 0;
+    if (desiredNoiseGate >= 0.5) {
+      this.noiseGateHoldRemaining = this.noiseGateHoldSamples;
+    } else if (this.noiseGateHoldRemaining > 0) {
+      desiredNoiseGate = 1;
+      this.noiseGateHoldRemaining -= 1;
+    }
+
+    const noiseCoeff = desiredNoiseGate > this.noiseGateState ? NOISE_GATE_RISE : NOISE_GATE_FALL;
+    this.noiseGateState += (desiredNoiseGate - this.noiseGateState) * noiseCoeff;
+    this.noiseGateState = clamp(this.noiseGateState, 0, 1);
+
+    const gainDb = this.gate.update(this.lastConfidence);
+    this.currentGain = dbToLinear(gainDb);
+    this.lastGateDb = gainDb;
+    if (this.workletNode) {
+      this.workletNode.port.postMessage({ type: "gain", value: this.currentGain });
+    }
+
+    const duckDb = this.config.gate.duckDb;
+    const gateNormalized = clamp((gainDb - duckDb) / (0 - duckDb), 0, 1);
+    const gateTarget = (playing ? gateNormalized : 0) * this.noiseGateState;
+
+    if (gateTarget >= this.guideEnvelope) {
+      this.guideEnvelope += this.envelopeAttackCoeff * (gateTarget - this.guideEnvelope);
+      this.guideReleaseHoldRemaining = this.guideReleaseHoldSamples;
+    } else {
+      if (this.guideReleaseHoldRemaining > 0) {
+        this.guideReleaseHoldRemaining -= 1;
+      } else {
+        const releaseCoeff = this.envelopeReleaseCoeff * (1 - this.envelopeReleaseMod * this.lastConfidence);
+        this.guideEnvelope += releaseCoeff * (gateTarget - this.guideEnvelope);
+      }
+    }
+    this.guideEnvelope = clamp(this.guideEnvelope, 0, 1);
+
+    const envelope = Math.max(GUIDE_FLOOR, this.guideEnvelope);
+    const strengthBlend = clamp(STRENGTH_BLEND_BASE + this.vocalStrength * STRENGTH_BLEND_SCALE, 0, 1);
+    const guideMix = envelope * strengthBlend;
+
+    if (envelope >= this.tailFollower) {
+      this.tailFollower += this.tailRiseCoeff * (envelope - this.tailFollower);
+    } else {
+      this.tailFollower += this.tailFallCoeff * (envelope - this.tailFollower);
+    }
+    this.tailFollower = clamp(this.tailFollower, 0, 1);
+    const tailMix = clamp(this.reverbTailMix * this.tailFollower * this.tailFollower, 0, 0.4);
+
+    this.currentGuideMix = playing ? guideMix : 0;
+    this.currentTailMix = playing ? tailMix : 0;
+    this.applyGuideProcessing();
+  }
+
   private getPlaybackPositionSeconds() {
     if (!this.audioContext) {
       return 0;
@@ -431,11 +827,8 @@ class AudioEngine {
         this.guidePitchShifter.percentagePlayed = normalized;
       }
 
-      this.guideGainNode = this.audioContext.createGain();
-      this.guideGainNode.gain.value = this.currentGain * this.guideBaseGain;
       const guideSink: AudioNode = this.vocalBusNode ?? this.audioContext.destination;
-      this.guidePitchShifter.connect(this.guideGainNode);
-      this.guideGainNode.connect(guideSink);
+      this.buildGuideChain(guideSink);
     }
   }
 
@@ -454,15 +847,13 @@ class AudioEngine {
       this.instrumentGainNode = null;
     }
 
-    if (this.guideGainNode) {
-      this.guideGainNode.disconnect();
-      this.guideGainNode = null;
-    }
+    this.teardownGuideChain();
     if (this.guidePitchShifter) {
       this.guidePitchShifter.disconnect();
       this.guidePitchShifter = null;
     }
     this.currentPitchRatio = 1;
+    this.resetDynamicsState();
   }
 
   private setPlaybackState(state: PlaybackState) {
@@ -492,6 +883,10 @@ class AudioEngine {
 
     await this.audioContext.resume();
     const offset = this.playbackOffset;
+    this.playbackSampleCursor = Math.max(
+      0,
+      Math.floor(offset * this.config.sampleRate)
+    );
     this.startMedia(offset);
     this.playbackStartTime = this.audioContext.currentTime - offset;
     this.setPlaybackState("playing");
@@ -506,6 +901,10 @@ class AudioEngine {
     }
 
     this.playbackOffset = Math.max(0, this.audioContext.currentTime - this.playbackStartTime);
+    this.playbackSampleCursor = Math.max(
+      0,
+      Math.floor(this.playbackOffset * this.config.sampleRate)
+    );
     this.stopMedia();
     this.setPlaybackState("paused");
   }
@@ -518,6 +917,7 @@ class AudioEngine {
     this.stopMedia();
     this.playbackOffset = 0;
     this.playbackStartTime = this.audioContext.currentTime;
+    this.playbackSampleCursor = 0;
     this.setPlaybackState("stopped");
   }
 
@@ -527,8 +927,17 @@ class AudioEngine {
   }
 
   private bindStore() {
+    this.settingUnsubs.forEach((fn) => fn());
+    this.settingUnsubs = [];
+
     const store = useAppStore.getState();
     this.gate.setManualMode(store.manualMode);
+    this.applyNoiseFloor(store.noiseFloor);
+    this.applyMicMonitorGain(store.micMonitorGainDb);
+    this.applyCrowdCancelStrength(store.crowdCancelStrength);
+    this.applyReverbStrength(store.reverbStrength);
+    this.applyTimbreStrength(store.timbreStrength);
+    this.applyPhraseSmoothness(store.phraseSmoothness);
 
     this.manualModeUnsub = useAppStore.subscribe(
       (state) => state.manualMode,
@@ -573,6 +982,40 @@ class AudioEngine {
       },
       { equalityFn: shallow }
     );
+
+    this.settingUnsubs.push(
+      useAppStore.subscribe((state) => state.noiseFloor, (value) => this.applyNoiseFloor(value))
+    );
+    this.settingUnsubs.push(
+      useAppStore.subscribe(
+        (state) => state.micMonitorGainDb,
+        (value) => this.applyMicMonitorGain(value)
+      )
+    );
+    this.settingUnsubs.push(
+      useAppStore.subscribe(
+        (state) => state.crowdCancelStrength,
+        (value) => this.applyCrowdCancelStrength(value)
+      )
+    );
+    this.settingUnsubs.push(
+      useAppStore.subscribe(
+        (state) => state.reverbStrength,
+        (value) => this.applyReverbStrength(value)
+      )
+    );
+    this.settingUnsubs.push(
+      useAppStore.subscribe(
+        (state) => state.timbreStrength,
+        (value) => this.applyTimbreStrength(value)
+      )
+    );
+    this.settingUnsubs.push(
+      useAppStore.subscribe(
+        (state) => state.phraseSmoothness,
+        (value) => this.applyPhraseSmoothness(value)
+      )
+    );
   }
 
   private enqueueBlock(block: Float32Array) {
@@ -613,8 +1056,54 @@ class AudioEngine {
     const vadJobs: Float32Array[] = [];
     const pitchJobs: Float32Array[] = [];
 
+    const playing = this.currentPlaybackState === "playing";
+    let cursor = this.playbackSampleCursor;
+    const instrumentLength = this.instrumentLength;
+    const instrumentChannels = this.instrumentChannels;
+    const instrumentChannelCount = instrumentChannels.length;
+
+    let frameMax = 0;
+    let energySum = 0;
+
     for (let i = 0; i < block.length; i += 1) {
       const sample = block[i];
+      energySum += sample * sample;
+
+      let instrumentMono = 0;
+      if (playing && instrumentLength > 0 && instrumentChannelCount > 0) {
+        const index = cursor % instrumentLength;
+        const left = instrumentChannels[0][index] ?? 0;
+        const right = instrumentChannelCount > 1 ? instrumentChannels[1][index] : left;
+        instrumentMono = 0.5 * (left + right) * this.instrumentBaseGain;
+      }
+
+      let detection = sample;
+      if (playing && Math.abs(instrumentMono) > 1.0e-4) {
+        const leakEstimate = instrumentMono * this.adaptiveLeakComp;
+        detection -= leakEstimate;
+        this.adaptiveLeakComp += this.crowdCancelAdaptRate * instrumentMono * detection;
+        this.adaptiveLeakComp = clamp(this.adaptiveLeakComp, 0, this.crowdCancelClamp);
+      } else {
+        this.adaptiveLeakComp += this.crowdCancelRecoveryRate * (this.playbackLeakComp - this.adaptiveLeakComp);
+      }
+      detection = clamp(detection, -1, 1);
+
+      const absDetection = Math.abs(detection);
+      frameMax = Math.max(frameMax, absDetection);
+
+      const lifted = Math.max(0, absDetection - this.noiseFloorAmplitude);
+      const strengthSample = Math.min(1, lifted * VOCAL_STRENGTH_SCALE);
+      const strengthCoeff = strengthSample > this.vocalStrength ? VOCAL_STRENGTH_RISE : VOCAL_STRENGTH_FALL;
+      this.vocalStrength += strengthCoeff * (strengthSample - this.vocalStrength);
+      this.vocalStrength = clamp(this.vocalStrength, 0, 1);
+
+      this.brightnessLowEnv += this.lowpassCoeff * (absDetection - this.brightnessLowEnv);
+      const highInstant = Math.abs(detection - this.brightnessLowEnv);
+      this.brightnessHighEnv += (this.lowpassCoeff * 0.5) * (highInstant - this.brightnessHighEnv);
+      const brightnessDelta = this.brightnessHighEnv - this.brightnessLowEnv;
+      const tiltTarget = clamp(brightnessDelta * this.timbreMatchStrength, -this.timbreMatchStrength, this.timbreMatchStrength);
+      this.timbreTilt += 0.05 * (tiltTarget - this.timbreTilt);
+      this.timbreTilt = clamp(this.timbreTilt, -1, 1);
 
       this.vadBuffer[this.vadOffset++] = sample;
       if (this.vadOffset === VAD_FRAME_SOURCE) {
@@ -627,6 +1116,10 @@ class AudioEngine {
         pitchJobs.push(this.downsampleFrame(this.pitchBuffer, PITCH_FRAME_TARGET));
         this.pitchOffset = 0;
       }
+
+      if (playing) {
+        cursor += 1;
+      }
     }
 
     for (const frame of vadJobs) {
@@ -636,19 +1129,10 @@ class AudioEngine {
       await this.evaluatePitch(frame);
     }
 
-    const rms = this.calculateRms(block);
+    const rms = block.length > 0 ? Math.sqrt(energySum / block.length) : 0;
     this.updateConfidence(rms);
 
-    const gainDb = this.gate.update(this.lastConfidence);
-    this.currentGain = dbToLinear(gainDb);
-    if (this.workletNode) {
-      this.workletNode.port.postMessage({ type: "gain", value: this.currentGain });
-    }
-
-    if (this.guideGainNode && this.audioContext) {
-      const target = this.currentGain * this.guideBaseGain;
-      this.guideGainNode.gain.setTargetAtTime(target, this.audioContext.currentTime, 0.01);
-    }
+    this.updateGuideEnvelope(frameMax, playing);
 
     if (this.guidePitchShifter) {
       const playbackTime = this.getPlaybackPositionSeconds();
@@ -663,12 +1147,22 @@ class AudioEngine {
       vad: this.lastVad,
       pitch: this.lastPitch,
       confidence: this.lastConfidence,
-      gainDb
+      gainDb: this.lastGateDb
     });
 
-    const outputRms = Math.min(1, Math.sqrt((rms * this.currentGain * this.guideBaseGain) ** 2 + this.instrumentBaseGain ** 2));
+    const guideContribution = rms * this.currentGuideMix * this.guideBaseGain;
+    const outputRms = Math.min(1, Math.sqrt(guideContribution ** 2 + this.instrumentBaseGain ** 2));
     store.setLevels(rms, outputRms);
     store.setConfidence(this.lastConfidence);
+
+    if (playing) {
+      const wrapLength = Math.max(this.instrumentLength, this.guideLength);
+      if (wrapLength > 0) {
+        this.playbackSampleCursor = cursor % wrapLength;
+      } else {
+        this.playbackSampleCursor = cursor;
+      }
+    }
   }
 
   private prepareVadFrame(frame: Float32Array) {
@@ -756,14 +1250,6 @@ class AudioEngine {
     }
 
     this.lastConfidence = Math.min(1, Math.max(0, combined));
-  }
-
-  private calculateRms(block: Float32Array) {
-    let sum = 0;
-    for (let i = 0; i < block.length; i += 1) {
-      sum += block[i] * block[i];
-    }
-    return Math.sqrt(sum / block.length);
   }
 
   private computeFrequencyFromSalience(salience: Float32Array) {
@@ -869,9 +1355,11 @@ class AudioEngine {
     this.manualModeUnsub?.();
     this.calibrationStageUnsub?.();
     this.trackUrlUnsub?.();
+    this.settingUnsubs.forEach((fn) => fn());
     this.manualModeUnsub = null;
     this.calibrationStageUnsub = null;
     this.trackUrlUnsub = null;
+    this.settingUnsubs = [];
 
     this.stop();
     this.workletNode?.disconnect();
@@ -888,12 +1376,17 @@ class AudioEngine {
 
     this.instrumentBuffer = null;
     this.guideBuffer = null;
+    this.instrumentChannels = [];
+    this.instrumentLength = 0;
+    this.guideChannels = [];
+    this.guideLength = 0;
     this.vadSession = null;
     this.pitchSession = null;
     this.queue = [];
     this.processing = false;
     this.playbackOffset = 0;
     this.playbackStartTime = 0;
+    this.playbackSampleCursor = 0;
     this.lastVad = 0;
     this.lastPitch = 0;
     this.lastPitchHz = 0;

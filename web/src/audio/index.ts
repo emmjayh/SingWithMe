@@ -532,16 +532,16 @@ class AudioEngine {
   }
 
   private updateFrameDimensions(sampleRate: number) {
-    const targetVad = Math.max(this.vadFrameTarget, Math.round(sampleRate * 0.01));
-    if (targetVad !== this.vadFrameSource) {
-      this.vadFrameSource = targetVad;
+    const newVadSource = Math.max(1, Math.round(sampleRate * 0.01));
+    if (newVadSource !== this.vadFrameSource) {
+      this.vadFrameSource = newVadSource;
       this.vadBuffer = new Float32Array(this.vadFrameSource);
       this.vadOffset = 0;
     }
 
-    const targetPitch = Math.max(this.pitchFrameTarget, Math.round(sampleRate * 0.064));
-    if (targetPitch !== this.pitchFrameSource) {
-      this.pitchFrameSource = targetPitch;
+    const newPitchSource = Math.max(this.pitchFrameTarget, Math.round(sampleRate * 0.064));
+    if (newPitchSource !== this.pitchFrameSource) {
+      this.pitchFrameSource = newPitchSource;
       this.pitchBuffer = new Float32Array(this.pitchFrameSource);
       this.pitchOffset = 0;
     }
@@ -1463,3 +1463,4 @@ class AudioEngine {
 export const audioEngine = new AudioEngine();
 
 (window as any).audioEngine = audioEngine;
+

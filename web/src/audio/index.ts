@@ -236,6 +236,7 @@ class AudioEngine {
   private settingUnsubs: Array<() => void> = [];
   private resumeListener: ((event: Event) => void) | null = null;
   private readonly resumeEvents = ["pointerdown", "touchstart", "keydown"];
+  private pitchAnalysisInProgress = false;
 
   async initialise() {
     if (this.initialised) return;
@@ -460,31 +461,38 @@ class AudioEngine {
     }
 
     const frame = new Float32Array(frameSource);
+    this.pitchAnalysisInProgress = true;
 
-    for (let frameIndex = 0; frameIndex < frameCount; frameIndex += 1) {
-      const start = frameIndex * hopSamples;
-      for (let i = 0; i < frameSource; i += 1) {
-        const sampleIndex = start + i;
-        if (sampleIndex < totalSamples) {
-          let sample = 0;
-          for (let channel = 0; channel < channelCount; channel += 1) {
-            sample += channelData[channel][sampleIndex];
+    try {
+      for (let frameIndex = 0; frameIndex < frameCount; frameIndex += 1) {
+        const start = frameIndex * hopSamples;
+        for (let i = 0; i < frameSource; i += 1) {
+          const sampleIndex = start + i;
+          if (sampleIndex < totalSamples) {
+            let sample = 0;
+            for (let channel = 0; channel < channelCount; channel += 1) {
+              sample += channelData[channel][sampleIndex];
+            }
+            frame[i] = sample / channelCount;
+          } else {
+            frame[i] = 0;
           }
-          frame[i] = sample / channelCount;
-        } else {
-          frame[i] = 0;
         }
+
+        const downsampled = this.downsampleFrame(frame, this.pitchFrameTarget);
+        const result = await this.inferPitch(downsampled, { bypassBusyCheck: true });
+
+        if (token !== this.guidePitchAnalysisToken) {
+          return;
+        }
+
+        track[frameIndex] = result?.frequency ?? 0;
+        confidenceTrack[frameIndex] = result?.confidence ?? 0;
+        // Yield so realtime pitch/VAD processing keeps the event loop responsive.
+        await new Promise((resolve) => setTimeout(resolve, 0));
       }
-
-      const downsampled = this.downsampleFrame(frame, this.pitchFrameTarget);
-      const result = await this.inferPitch(downsampled);
-
-      if (token !== this.guidePitchAnalysisToken) {
-        return;
-      }
-
-      track[frameIndex] = result?.frequency ?? 0;
-      confidenceTrack[frameIndex] = result?.confidence ?? 0;
+    } finally {
+      this.pitchAnalysisInProgress = false;
     }
 
     if (token !== this.guidePitchAnalysisToken) {
@@ -1419,8 +1427,16 @@ class AudioEngine {
     return Math.min(2.5, Math.max(0.5, ratio));
   }
 
-  private async inferPitch(frame: Float32Array) {
+  private async inferPitch(
+    frame: Float32Array,
+    options: { bypassBusyCheck?: boolean } = {}
+  ) {
+    const { bypassBusyCheck = false } = options;
     if (!this.pitchSession) {
+      return null;
+    }
+
+    if (!bypassBusyCheck && this.pitchAnalysisInProgress) {
       return null;
     }
     try {
@@ -1509,6 +1525,7 @@ class AudioEngine {
     this.guidePitchAnalysisToken += 1;
     this.resetGuidePitchTrack();
     this.initialised = false;
+    this.pitchAnalysisInProgress = false;
   }
 
   private normalizeOffset(offset: number, duration: number) {

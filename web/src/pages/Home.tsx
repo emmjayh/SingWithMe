@@ -65,7 +65,7 @@ export default function Home() {
             </a>
             <a
               className="download-button"
-              href="https://buy.stripe.com/4gM28sfkj4YfafodWK"
+              href="https://buy.stripe.com/4gM28sfkj4YfafodWK87K00"
               target="_blank"
               rel="noreferrer"
             >
@@ -86,3 +86,4 @@ export default function Home() {
     </div>
   );
 }
+

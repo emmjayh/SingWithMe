@@ -355,7 +355,9 @@ class AudioEngine {
     });
 
     if (this.guideBuffer) {
-      await this.analyzeGuidePitch();
+      void this.analyzeGuidePitch().catch(() => {
+        this.resetGuidePitchTrack();
+      });
     }
   }
 
@@ -404,7 +406,9 @@ class AudioEngine {
     this.playbackSampleCursor = 0;
 
     if (this.pitchSession && this.guideBuffer) {
-      await this.analyzeGuidePitch();
+      void this.analyzeGuidePitch().catch(() => {
+        this.resetGuidePitchTrack();
+      });
     } else {
       this.resetGuidePitchTrack();
     }

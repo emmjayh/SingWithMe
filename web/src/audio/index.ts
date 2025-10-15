@@ -234,6 +234,8 @@ class AudioEngine {
   private lastVadFrameLength = 0;
   private vadFailed = false;
   private settingUnsubs: Array<() => void> = [];
+  private resumeListener: ((event: Event) => void) | null = null;
+  private readonly resumeEvents = ["pointerdown", "touchstart", "keydown"];
 
   async initialise() {
     if (this.initialised) return;
@@ -266,6 +268,7 @@ class AudioEngine {
     this.vadState.fill(0);
 
     await this.setupAudioGraph();
+    this.ensureInteractiveResume();
     await this.loadModels();
     await this.loadMedia();
     this.playbackOffset = 0;
@@ -294,6 +297,9 @@ class AudioEngine {
     }
 
     await this.audioContext.resume().catch(() => undefined);
+    if (this.audioContext.state !== "running") {
+      this.ensureInteractiveResume();
+    }
     await this.audioContext.audioWorklet.addModule(AUDIO_WORKLET_URL);
 
     const actualSampleRate = this.audioContext.sampleRate;
@@ -919,7 +925,11 @@ class AudioEngine {
       return;
     }
 
-    await this.audioContext.resume();
+    await this.audioContext.resume().catch(() => undefined);
+    if (this.audioContext.state !== "running") {
+      this.ensureInteractiveResume();
+      return;
+    }
     const offset = this.playbackOffset;
     this.playbackSampleCursor = Math.max(
       0,
@@ -1087,6 +1097,57 @@ class AudioEngine {
     } finally {
       this.processing = false;
     }
+  }
+
+  private ensureInteractiveResume() {
+    if (!this.audioContext) {
+      this.clearResumeListener();
+      return;
+    }
+
+    if (this.audioContext.state === "running") {
+      this.clearResumeListener();
+      return;
+    }
+
+    if (this.resumeListener) {
+      return;
+    }
+
+    const handler = async () => {
+      if (!this.audioContext) {
+        this.clearResumeListener();
+        return;
+      }
+
+      try {
+        await this.audioContext.resume();
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.warn("AudioEngine resume failed", error);
+        return;
+      }
+
+      if (this.audioContext.state === "running") {
+        this.clearResumeListener();
+      }
+    };
+
+    this.resumeListener = handler;
+    for (const event of this.resumeEvents) {
+      window.addEventListener(event, handler);
+    }
+  }
+
+  private clearResumeListener() {
+    if (!this.resumeListener) {
+      return;
+    }
+
+    for (const event of this.resumeEvents) {
+      window.removeEventListener(event, this.resumeListener);
+    }
+    this.resumeListener = null;
   }
 
   private async processBlock(block: Float32Array) {
@@ -1410,6 +1471,7 @@ class AudioEngine {
     this.calibrationStageUnsub = null;
     this.trackUrlUnsub = null;
     this.settingUnsubs = [];
+    this.clearResumeListener();
 
     this.stop();
     this.workletNode?.disconnect();

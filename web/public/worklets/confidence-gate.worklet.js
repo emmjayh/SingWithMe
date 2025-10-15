@@ -34,9 +34,10 @@ class ConfidenceGateProcessor extends AudioWorkletProcessor {
     for (let i = 0; i < inputChannel.length; i += 1) {
       const sample = inputChannel[i];
       this.currentGain += (this.targetGain - this.currentGain) * this.smoothing;
-      mainOut[i] = sample;
+      const gated = sample * this.currentGain;
+      mainOut[i] = gated;
       if (guideOut) {
-        guideOut[i] = sample;
+        guideOut[i] = gated;
       }
     }
 

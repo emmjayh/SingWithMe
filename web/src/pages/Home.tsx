@@ -55,7 +55,9 @@ export default function Home() {
             </a>
           </p>
         </section>
-        <section className="panel downloads">
+      </main>
+      <section className="download-banner">
+        <div className="download-banner__inner">
           <h2>Get TuneTrix</h2>
           <div className="download-button-group">
             <AndroidWaitlistForm />
@@ -72,8 +74,8 @@ export default function Home() {
               </div>
             </a>
           </div>
-        </section>
-      </main>
+        </div>
+      </section>
       <footer className="app-footer">
         <a href="/privacy.html" target="_blank" rel="noreferrer">
           Privacy Policy

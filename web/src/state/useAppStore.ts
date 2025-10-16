@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { resolveAssetUrl } from "@utils/assetPaths";
 
 export type ManualMode = "auto" | "always_on" | "always_off";
 export type CalibrationStage = "idle" | "collecting" | "complete";
@@ -14,10 +15,12 @@ export interface TrackUrls {
   guideUrl: string | null;
 }
 
-const defaultInstrumentUrl = import.meta.env.VITE_INSTRUMENT_URL ?? "/media/braykit-instrument.mp3";
-const defaultGuideUrl = import.meta.env.VITE_GUIDE_URL ?? "/media/braykit-guide.mp3";
-const sampleInstrumentUrl = "/media/demo-instrument.mp3";
-const sampleGuideUrl = "/media/demo-guide.mp3";
+const defaultInstrumentUrl =
+  resolveAssetUrl(import.meta.env.VITE_INSTRUMENT_URL ?? "/media/braykit-instrument.mp3")!;
+const defaultGuideUrl =
+  resolveAssetUrl(import.meta.env.VITE_GUIDE_URL ?? "/media/braykit-guide.mp3")!;
+const sampleInstrumentUrl = resolveAssetUrl("/media/demo-instrument.mp3")!;
+const sampleGuideUrl = resolveAssetUrl("/media/demo-guide.mp3")!;
 
 interface AppState {
   inputLevel: number;
@@ -80,8 +83,10 @@ export const useAppStore = create<AppState>((set) => ({
   setPlaybackState: (playbackState) => set({ playbackState }),
   setTrackUrls: ({ instrumentUrl, guideUrl }) =>
     set((state) => ({
-      instrumentUrl: instrumentUrl ?? state.instrumentUrl,
-      guideUrl: guideUrl ?? state.guideUrl
+      instrumentUrl: instrumentUrl
+        ? resolveAssetUrl(instrumentUrl) ?? instrumentUrl
+        : state.instrumentUrl,
+      guideUrl: guideUrl ? resolveAssetUrl(guideUrl) ?? guideUrl : state.guideUrl
     })),
   resetTrackUrls: () =>
     set({

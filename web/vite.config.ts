@@ -8,7 +8,8 @@ export default defineConfig({
     alias: {
       "@audio": path.resolve(__dirname, "src/audio"),
       "@components": path.resolve(__dirname, "src/components"),
-      "@state": path.resolve(__dirname, "src/state")
+      "@state": path.resolve(__dirname, "src/state"),
+      "@utils": path.resolve(__dirname, "src/utils")
     }
   },
   server: {

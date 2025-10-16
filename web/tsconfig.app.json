@@ -14,7 +14,8 @@
     "paths": {
       "@audio/*": ["src/audio/*"],
       "@components/*": ["src/components/*"],
-      "@state/*": ["src/state/*"]
+      "@state/*": ["src/state/*"],
+      "@utils/*": ["src/utils/*"]
     }
   },
   "include": ["src"]

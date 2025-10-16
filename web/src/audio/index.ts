@@ -1,12 +1,13 @@
 import * as ort from "onnxruntime-web";
+import { shallow } from "zustand/shallow";
 import { ManualMode, useAppStore, CalibrationStage, PlaybackState } from "@state/useAppStore";
+import { resolveAssetUrl } from "@utils/assetPaths";
+import { PitchShifter } from "soundtouchjs";
 import { ConfidenceGate, GateConfig, dbToLinear } from "./confidenceGate";
 import { Calibrator } from "./calibrator";
 import { TelemetryLog } from "./telemetry";
-import { PitchShifter } from "soundtouchjs";
-import { shallow } from "zustand/shallow";
 
-const AUDIO_WORKLET_URL = "/worklets/confidence-gate.worklet.js";
+const AUDIO_WORKLET_URL = resolveAssetUrl("/worklets/confidence-gate.worklet.js") ?? "/worklets/confidence-gate.worklet.js";
 const SAMPLE_RATE_TARGET = 16000;
 const VAD_FRAME_SOURCE = 672; // 14 ms @ 48 kHz (minimum window for Silero VAD)
 const VAD_FRAME_TARGET = 224; // 14 ms @ 16 kHz (minimum window for Silero VAD)
@@ -86,8 +87,8 @@ const defaultConfig: EngineConfig = {
   sampleRate: 48000,
   bufferSamples: 128,
   models: {
-    vad: import.meta.env.VITE_MODEL_PATH_VAD ?? "/models/vad.onnx",
-    pitch: import.meta.env.VITE_MODEL_PATH_PITCH ?? "/models/crepe_tiny.onnx"
+    vad: resolveAssetUrl(import.meta.env.VITE_MODEL_PATH_VAD ?? "/models/vad.onnx") ?? "/models/vad.onnx",
+    pitch: resolveAssetUrl(import.meta.env.VITE_MODEL_PATH_PITCH ?? "/models/crepe_tiny.onnx") ?? "/models/crepe_tiny.onnx"
   },
   confidenceWeights: {
     vad: 0.6,
@@ -106,8 +107,8 @@ const defaultConfig: EngineConfig = {
     duckDb: -18
   },
   media: {
-    instrumentUrl: import.meta.env.VITE_INSTRUMENT_URL ?? "/media/braykit-instrument.mp3",
-    guideUrl: import.meta.env.VITE_GUIDE_URL ?? "/media/braykit-guide.mp3",
+    instrumentUrl: resolveAssetUrl(import.meta.env.VITE_INSTRUMENT_URL ?? "/media/braykit-instrument.mp3"),
+    guideUrl: resolveAssetUrl(import.meta.env.VITE_GUIDE_URL ?? "/media/braykit-guide.mp3"),
     loop: true,
     instrumentGainDb: 0,
     guideGainDb: 0,
@@ -244,8 +245,12 @@ class AudioEngine {
 
     this.config = defaultConfig;
     const trackState = useAppStore.getState();
-    this.config.media.instrumentUrl = trackState.instrumentUrl ?? defaultConfig.media.instrumentUrl;
-    this.config.media.guideUrl = trackState.guideUrl ?? defaultConfig.media.guideUrl;
+    this.config.media.instrumentUrl = resolveAssetUrl(
+      trackState.instrumentUrl ?? defaultConfig.media.instrumentUrl
+    );
+    this.config.media.guideUrl = resolveAssetUrl(
+      trackState.guideUrl ?? defaultConfig.media.guideUrl
+    );
     this.config.media.micMonitorGainDb =
       trackState.micMonitorGainDb ?? defaultConfig.media.micMonitorGainDb;
     this.updateFrameDimensions(this.config.sampleRate);
@@ -396,8 +401,10 @@ class AudioEngine {
     };
 
     const state = useAppStore.getState();
-    const instrumentUrl = state.instrumentUrl ?? this.config.media.instrumentUrl;
-    const guideUrl = state.guideUrl ?? this.config.media.guideUrl;
+    const instrumentUrl = resolveAssetUrl(
+      state.instrumentUrl ?? this.config.media.instrumentUrl ?? null
+    );
+    const guideUrl = resolveAssetUrl(state.guideUrl ?? this.config.media.guideUrl ?? null);
 
     this.instrumentBuffer = await fetchBuffer(instrumentUrl);
     this.guideBuffer = await fetchBuffer(guideUrl);
@@ -1029,8 +1036,12 @@ class AudioEngine {
     this.trackUrlUnsub = useAppStore.subscribe(
       (state) => [state.instrumentUrl, state.guideUrl] as const,
       async ([instrumentUrl, guideUrl]) => {
-        const resolvedInstrument = instrumentUrl ?? defaultConfig.media.instrumentUrl;
-        const resolvedGuide = guideUrl ?? defaultConfig.media.guideUrl;
+        const resolvedInstrument = resolveAssetUrl(
+          instrumentUrl ?? defaultConfig.media.instrumentUrl ?? null
+        );
+        const resolvedGuide = resolveAssetUrl(
+          guideUrl ?? defaultConfig.media.guideUrl ?? null
+        );
 
         const mediaChanged =
           this.config.media.instrumentUrl !== resolvedInstrument ||
@@ -1391,7 +1402,8 @@ class AudioEngine {
 
     let combined = weights.vad * vadComponent + weights.pitch * pitchComponent + weights.phraseAware * 0;
 
-    combined = Math.max(combined, vadComponent);
+    const energyConfidence = Math.pow(energyGate, 0.55);
+    combined = Math.max(combined, vadComponent, energyConfidence * 0.85);
 
     this.lastConfidence = clamp(combined, 0, 1);
   }

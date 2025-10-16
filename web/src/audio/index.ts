@@ -773,18 +773,7 @@ class AudioEngine {
   }
 
   private updateGuideEnvelope(frameMax: number, playing: boolean) {
-    let desiredNoiseGate = frameMax > this.noiseFloorAmplitude ? 1 : 0;
-    if (desiredNoiseGate >= 0.5) {
-      this.noiseGateHoldRemaining = this.noiseGateHoldSamples;
-    } else if (this.noiseGateHoldRemaining > 0) {
-      desiredNoiseGate = 1;
-      this.noiseGateHoldRemaining -= 1;
-    }
-
-    const noiseCoeff = desiredNoiseGate > this.noiseGateState ? NOISE_GATE_RISE : NOISE_GATE_FALL;
-    this.noiseGateState += (desiredNoiseGate - this.noiseGateState) * noiseCoeff;
-    this.noiseGateState = clamp(this.noiseGateState, 0, 1);
-
+    const amplitudeGate = frameMax > this.noiseFloorAmplitude ? 1 : 0;
     const gainDb = this.gate.update(this.lastConfidence);
     this.currentGain = dbToLinear(gainDb);
     this.lastGateDb = gainDb;
@@ -794,6 +783,20 @@ class AudioEngine {
 
     const duckDb = this.config.gate.duckDb;
     const gateNormalized = clamp((gainDb - duckDb) / (0 - duckDb), 0, 1);
+
+    const gateLifted = gateNormalized >= 0.6;
+    if (amplitudeGate >= 0.5 || gateLifted) {
+      this.noiseGateHoldRemaining = this.noiseGateHoldSamples;
+    } else if (this.noiseGateHoldRemaining > 0) {
+      this.noiseGateHoldRemaining -= 1;
+    }
+
+    const holdActive = this.noiseGateHoldRemaining > 0;
+    const desiredNoiseGate = Math.max(holdActive ? 1 : amplitudeGate, gateNormalized);
+    const noiseCoeff = desiredNoiseGate > this.noiseGateState ? NOISE_GATE_RISE : NOISE_GATE_FALL;
+    this.noiseGateState += (desiredNoiseGate - this.noiseGateState) * noiseCoeff;
+    this.noiseGateState = clamp(this.noiseGateState, 0, 1);
+
     const gateTarget = (playing ? gateNormalized : 0) * this.noiseGateState;
 
     if (gateTarget >= this.guideEnvelope) {

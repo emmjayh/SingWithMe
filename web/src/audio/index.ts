@@ -22,6 +22,7 @@ for (let i = 0; i < CREPE_CENTS_MAPPING.length; i += 1) {
 const GUIDE_FLOOR = 0.05;
 const STRENGTH_BLEND_BASE = 0.25;
 const STRENGTH_BLEND_SCALE = 0.75;
+const GUIDE_BOOST_HEADROOM = 0.8;
 const NOISE_GATE_RISE = 0.12;
 const NOISE_GATE_FALL = 0.004;
 const NOISE_GATE_HOLD_MS = 28;
@@ -102,7 +103,7 @@ const defaultConfig: EngineConfig = {
     thresholdOff: 0.4,
     framesOn: 3,
     framesOff: 6,
-    duckDb: -80
+    duckDb: -18
   },
   media: {
     instrumentUrl: import.meta.env.VITE_INSTRUMENT_URL ?? "/media/braykit-instrument.mp3",
@@ -110,7 +111,7 @@ const defaultConfig: EngineConfig = {
     loop: true,
     instrumentGainDb: 0,
     guideGainDb: 0,
-    micMonitorGainDb: Number.NEGATIVE_INFINITY,
+    micMonitorGainDb: -6,
     playbackLeakCompensation: 0.6,
     crowdCancelAdaptRate: 0.0005,
     crowdCancelRecoveryRate: 0.00005,
@@ -245,12 +246,15 @@ class AudioEngine {
     const trackState = useAppStore.getState();
     this.config.media.instrumentUrl = trackState.instrumentUrl ?? defaultConfig.media.instrumentUrl;
     this.config.media.guideUrl = trackState.guideUrl ?? defaultConfig.media.guideUrl;
+    this.config.media.micMonitorGainDb =
+      trackState.micMonitorGainDb ?? defaultConfig.media.micMonitorGainDb;
     this.updateFrameDimensions(this.config.sampleRate);
     this.gate.configure(this.config.sampleRate, this.config.bufferSamples, this.config.gate);
     this.currentGain = this.gate.currentGainLinear();
     this.instrumentBaseGain = dbToLinear(this.config.media.instrumentGainDb ?? 0);
     this.guideBaseGain = dbToLinear(this.config.media.guideGainDb ?? 0);
-    this.micMonitorGainDb = this.config.media.micMonitorGainDb ?? Number.NEGATIVE_INFINITY;
+    this.micMonitorGainDb =
+      this.config.media.micMonitorGainDb ?? defaultConfig.media.micMonitorGainDb ?? -60;
     this.micMonitorLinear = dbToLinear(this.micMonitorGainDb);
     this.playbackLeakComp = clamp(this.config.media.playbackLeakCompensation ?? 0.6, 0, 1);
     this.adaptiveLeakComp = this.playbackLeakComp;
@@ -619,6 +623,10 @@ class AudioEngine {
     }
     if (this.guideReverbFeedbackNode) {
       this.guideReverbFeedbackNode.gain.setTargetAtTime(this.reverbFeedback, now, 0.05);
+    }
+    if (this.guideGainNode) {
+      const boost = 1 + this.currentGuideMix * GUIDE_BOOST_HEADROOM;
+      this.guideGainNode.gain.setTargetAtTime(boost, now, 0.02);
     }
 
     const tiltLow = clamp(1 - this.timbreTilt, 0.2, 2);
@@ -1276,9 +1284,9 @@ class AudioEngine {
       gainDb: this.lastGateDb
     });
 
-    const guideContribution = rms * this.currentGuideMix * this.guideBaseGain;
-    const outputRms = Math.min(1, Math.sqrt(guideContribution ** 2 + this.instrumentBaseGain ** 2));
-    store.setLevels(rms, outputRms);
+    const inputMeter = clamp(frameMax * 1.1, 0, 1);
+    const outputMeter = clamp(this.currentGuideMix + this.currentTailMix * 0.5, 0, 1);
+    store.setLevels(inputMeter, outputMeter);
     store.setConfidence(this.lastConfidence);
 
     if (playing) {

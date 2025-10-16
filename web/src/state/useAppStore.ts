@@ -66,7 +66,7 @@ export const useAppStore = create<AppState>((set) => ({
   instrumentUrl: defaultInstrumentUrl,
   guideUrl: defaultGuideUrl,
   noiseFloor: 0.22,
-  micMonitorGainDb: -60,
+  micMonitorGainDb: -6,
   crowdCancelStrength: 1,
   reverbStrength: 0,
   timbreStrength: 1,

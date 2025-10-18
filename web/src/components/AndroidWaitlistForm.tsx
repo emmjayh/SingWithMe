@@ -2,7 +2,7 @@ import { FormEvent, useMemo, useState } from "react";
 
 type Status = "idle" | "submitting" | "success" | "error";
 
-const DEFAULT_MAILTO = "mailto:hello@tunetrix.cc";
+const DEFAULT_MAILTO = "mailto:LocalHealthApp@gmail.com";
 
 function isValidEmail(value: string) {
   return /\S+@\S+\.\S+/.test(value);
@@ -74,7 +74,7 @@ export function AndroidWaitlistForm() {
       }
 
       setStatus("success");
-      setMessage("Thanks! You're on the list—watch your inbox for the invite.");
+      setMessage("Thanks! You're on the list - watch your inbox for the invite.");
       setEmail("");
     } catch (error) {
       setStatus("error");
@@ -104,7 +104,7 @@ export function AndroidWaitlistForm() {
           required
         />
         <button type="submit" disabled={status === "submitting"}>
-          {status === "submitting" ? "Sending…" : "Request invite"}
+          {status === "submitting" ? "Sending..." : "Request invite"}
         </button>
       </div>
       {message && (

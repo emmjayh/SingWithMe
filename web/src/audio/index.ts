@@ -411,6 +411,28 @@ class AudioEngine {
     this.instrumentBuffer = await fetchBuffer(instrumentUrl, "instrument");
     this.guideBuffer = await fetchBuffer(guideUrl, "guide");
 
+    if (!this.instrumentBuffer || this.instrumentBuffer.numberOfChannels === 0) {
+      const fallbackInstrument = resolveAssetUrl("/media/demo-instrument.wav");
+      if (fallbackInstrument && fallbackInstrument !== instrumentUrl) {
+        console.warn("[AudioEngine] Falling back to bundled demo instrument", fallbackInstrument);
+        this.instrumentBuffer = await fetchBuffer(fallbackInstrument, "instrument-fallback");
+        if (this.instrumentBuffer) {
+          this.config.media.instrumentUrl = fallbackInstrument;
+        }
+      }
+    }
+
+    if (!this.guideBuffer || this.guideBuffer.numberOfChannels === 0) {
+      const fallbackGuide = resolveAssetUrl("/media/demo-guide.wav");
+      if (fallbackGuide && fallbackGuide !== guideUrl) {
+        console.warn("[AudioEngine] Falling back to bundled demo guide", fallbackGuide);
+        this.guideBuffer = await fetchBuffer(fallbackGuide, "guide-fallback");
+        if (this.guideBuffer) {
+          this.config.media.guideUrl = fallbackGuide;
+        }
+      }
+    }
+
     this.instrumentChannels = [];
     if (this.instrumentBuffer) {
       for (let channel = 0; channel < this.instrumentBuffer.numberOfChannels; channel += 1) {

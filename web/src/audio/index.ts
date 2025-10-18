@@ -1601,11 +1601,6 @@ class AudioEngine {
     return result;
   }
 }
-
 export const audioEngine = new AudioEngine();
 
 (window as any).audioEngine = audioEngine;
-
-    instrumentUrl: resolveAssetUrl(import.meta.env.VITE_INSTRUMENT_URL ?? "/media/demo-instrument.wav"),
-    guideUrl: resolveAssetUrl(import.meta.env.VITE_GUIDE_URL ?? "/media/demo-guide.wav"),
-    micMonitorGainDb: -60,

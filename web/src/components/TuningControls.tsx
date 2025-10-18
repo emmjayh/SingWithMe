@@ -36,14 +36,12 @@ function SliderRow({ label, min, max, step, value, onChange, suffix, format }: S
 
 export function TuningControls() {
   const noiseFloor = useAppStore((state) => state.noiseFloor);
-  const micMonitorGainDb = useAppStore((state) => state.micMonitorGainDb);
   const crowdCancelStrength = useAppStore((state) => state.crowdCancelStrength);
   const reverbStrength = useAppStore((state) => state.reverbStrength);
   const timbreStrength = useAppStore((state) => state.timbreStrength);
   const phraseSmoothness = useAppStore((state) => state.phraseSmoothness);
 
   const setNoiseFloor = useAppStore((state) => state.setNoiseFloor);
-  const setMicMonitorGainDb = useAppStore((state) => state.setMicMonitorGainDb);
   const setCrowdCancelStrength = useAppStore((state) => state.setCrowdCancelStrength);
   const setReverbStrength = useAppStore((state) => state.setReverbStrength);
   const setTimbreStrength = useAppStore((state) => state.setTimbreStrength);
@@ -60,16 +58,6 @@ export function TuningControls() {
         onChange={setNoiseFloor}
         suffix=""
         format={(value) => value.toFixed(3)}
-      />
-      <SliderRow
-        label="Mic Monitor"
-        min={-60}
-        max={6}
-        step={0.5}
-        value={micMonitorGainDb}
-        onChange={setMicMonitorGainDb}
-        suffix=" dB"
-        format={(value) => value.toFixed(1)}
       />
       <SliderRow
         label="Crowd Cancel"

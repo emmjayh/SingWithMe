@@ -80,9 +80,9 @@ interface EngineConfig {
   };
   gate: GateConfig;
   media: MediaConfig;
-  latencyTargetMs: number;
-}
-
+  media: {
+    instrumentUrl: resolveAssetUrl(import.meta.env.VITE_INSTRUMENT_URL ?? "/media/demo-instrument.wav"),
+    guideUrl: resolveAssetUrl(import.meta.env.VITE_GUIDE_URL ?? "/media/demo-guide.wav"),
 const defaultConfig: EngineConfig = {
   sampleRate: 48000,
   bufferSamples: 128,
@@ -107,9 +107,8 @@ const defaultConfig: EngineConfig = {
     duckDb: -18
   },
   media: {
-    instrumentUrl: resolveAssetUrl(import.meta.env.VITE_INSTRUMENT_URL ?? "/media/braykit-instrument.mp3"),
-    guideUrl: resolveAssetUrl(import.meta.env.VITE_GUIDE_URL ?? "/media/braykit-guide.mp3"),
-    loop: true,
+    instrumentUrl: resolveAssetUrl(import.meta.env.VITE_INSTRUMENT_URL ?? "/media/demo-instrument.wav"),
+    guideUrl: resolveAssetUrl(import.meta.env.VITE_GUIDE_URL ?? "/media/demo-guide.wav"),
     micMonitorGainDb: -60,
     guideGainDb: 0,
     micMonitorGainDb: -6,

@@ -1,4 +1,4 @@
-﻿import * as ort from "onnxruntime-web";
+import * as ort from "onnxruntime-web";
 import { shallow } from "zustand/shallow";
 import { ManualMode, useAppStore, CalibrationStage, PlaybackState } from "@state/useAppStore";
 import { resolveAssetUrl } from "@utils/assetPaths";

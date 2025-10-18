@@ -26,7 +26,7 @@ const STRENGTH_BLEND_SCALE = 0.75;
 const GUIDE_BOOST_HEADROOM = 0.8;
 const NOISE_GATE_RISE = 0.12;
 const NOISE_GATE_FALL = 0.004;
-const NOISE_GATE_HOLD_MS = 28;
+const NOISE_GATE_HOLD_MS = 48;
 const GUIDE_RELEASE_MIN_MS = 10;
 const GUIDE_RELEASE_HOLD_MS = 48;
 const TIMBRE_LPF_MS = 24;
@@ -225,6 +225,7 @@ class AudioEngine {
   private lastVad = 0;
   private lastPitch = 0;
   private lastPitchHz = 0;
+  private lastConfidenceRaw = 0;
   private lastConfidence = 0;
   private currentGain = 1;
   private calibrating = false;
@@ -1402,7 +1403,11 @@ class AudioEngine {
     const energyConfidence = Math.pow(energyGate, 0.55);
     combined = Math.max(combined, vadComponent, energyConfidence * 0.85);
 
-    this.lastConfidence = clamp(combined, 0, 1);
+    const targetConfidence = clamp(combined, 0, 1);
+    this.lastConfidenceRaw = targetConfidence;
+    const CONFIDENCE_SMOOTH = 0.185;
+    this.lastConfidence += CONFIDENCE_SMOOTH * (targetConfidence - this.lastConfidence);
+    this.lastConfidence = clamp(this.lastConfidence, 0, 1);
   }
 
   private computeFrequencyFromSalience(salience: Float32Array) {

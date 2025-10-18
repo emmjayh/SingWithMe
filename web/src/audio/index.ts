@@ -352,10 +352,12 @@ class AudioEngine {
     this.vocalBusNode.connect(this.audioContext.destination);
 
     this.micGainNode?.disconnect();
+    this.streamSource.connect(this.workletNode);
+    this.workletNode.connect(this.vocalBusNode);
+
     this.micGainNode = this.audioContext.createGain();
     this.micGainNode.gain.value = this.micMonitorLinear;
-    this.streamSource.connect(this.workletNode);
-    this.workletNode.connect(this.micGainNode);
+    this.streamSource.connect(this.micGainNode);
     this.micGainNode.connect(this.vocalBusNode);
 
     if (this.workletNode) {

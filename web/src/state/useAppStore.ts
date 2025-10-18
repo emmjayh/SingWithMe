@@ -1,4 +1,4 @@
-import { create } from "zustand";
+﻿import { create } from "zustand";
 import { resolveAssetUrl } from "@utils/assetPaths";
 
 export type ManualMode = "auto" | "always_on" | "always_off";
@@ -19,8 +19,8 @@ const defaultInstrumentUrl =
   resolveAssetUrl(import.meta.env.VITE_INSTRUMENT_URL ?? "/media/braykit-instrument.mp3")!;
 const defaultGuideUrl =
   resolveAssetUrl(import.meta.env.VITE_GUIDE_URL ?? "/media/braykit-guide.mp3")!;
-const sampleInstrumentUrl = resolveAssetUrl("/media/demo-instrument.mp3")!;
-const sampleGuideUrl = resolveAssetUrl("/media/demo-guide.mp3")!;
+const sampleInstrumentUrl = resolveAssetUrl("/media/demo-instrument.wav")!;
+const sampleGuideUrl = resolveAssetUrl("/media/demo-guide.wav")!;
 
 interface AppState {
   inputLevel: number;

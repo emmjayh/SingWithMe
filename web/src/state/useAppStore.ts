@@ -16,11 +16,21 @@ export interface TrackUrls {
 }
 
 const defaultInstrumentUrl =
-  resolveAssetUrl(import.meta.env.VITE_INSTRUMENT_URL ?? "/media/demo-instrument.wav")!;
+  resolveAssetUrl(
+    import.meta.env.VITE_INSTRUMENT_URL ??
+      "/media/I light up the dark like a ghost with a  (Cover) (Instrumental).mp3"
+  )!;
 const defaultGuideUrl =
-  resolveAssetUrl(import.meta.env.VITE_GUIDE_URL ?? "/media/demo-guide.wav")!;
-const sampleInstrumentUrl = resolveAssetUrl("/media/demo-instrument.wav")!;
-const sampleGuideUrl = resolveAssetUrl("/media/demo-guide.wav")!;
+  resolveAssetUrl(
+    import.meta.env.VITE_GUIDE_URL ??
+      "/media/I light up the dark like a ghost with a  (Cover) (Vocals).mp3"
+  )!;
+const sampleInstrumentUrl = resolveAssetUrl(
+  "/media/I light up the dark like a ghost with a  (Cover) (Instrumental).mp3"
+)!;
+const sampleGuideUrl = resolveAssetUrl(
+  "/media/I light up the dark like a ghost with a  (Cover) (Vocals).mp3"
+)!;
 
 interface AppState {
   inputLevel: number;

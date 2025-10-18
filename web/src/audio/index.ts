@@ -139,7 +139,6 @@ class AudioEngine {
   private audioContext: AudioContext | null = null;
   private workletNode: AudioWorkletNode | null = null;
   private micGainNode: GainNode | null = null;
-  private workletMonitorTap: GainNode | null = null;
   private streamSource: MediaStreamAudioSourceNode | null = null;
   private vadSession: ort.InferenceSession | null = null;
   private pitchSession: ort.InferenceSession | null = null;
@@ -347,25 +346,19 @@ class AudioEngine {
       }
     };
 
-    this.streamSource.connect(this.workletNode);
-
-    this.workletMonitorTap?.disconnect();
-    this.workletMonitorTap = this.audioContext.createGain();
-    this.workletMonitorTap.gain.value = 0;
-    this.workletNode.connect(this.workletMonitorTap);
-    this.workletMonitorTap.connect(this.audioContext.destination);
-
-    this.micGainNode?.disconnect();
-    this.micGainNode = this.audioContext.createGain();
-    this.micGainNode.gain.value = this.micMonitorLinear;
-    this.streamSource.connect(this.micGainNode);
-
     this.vocalBusNode?.disconnect();
     this.vocalBusNode = this.audioContext.createGain();
     this.vocalBusNode.gain.value = 1;
     this.vocalBusNode.connect(this.audioContext.destination);
 
-    this.micGainNode.connect(this.audioContext.destination);
+    this.streamSource.connect(this.workletNode);
+    this.workletNode.connect(this.vocalBusNode);
+
+    this.micGainNode?.disconnect();
+    this.micGainNode = this.audioContext.createGain();
+    this.micGainNode.gain.value = this.micMonitorLinear;
+    this.streamSource.connect(this.micGainNode);
+    this.micGainNode.connect(this.vocalBusNode);
 
     if (this.workletNode) {
       this.workletNode.port.postMessage({ type: "reset", value: this.currentGain });
@@ -1536,12 +1529,10 @@ class AudioEngine {
 
     this.stop();
     this.workletNode?.disconnect();
-    this.workletMonitorTap?.disconnect();
     this.micGainNode?.disconnect();
     this.streamSource?.disconnect();
     this.vocalBusNode?.disconnect();
     this.workletNode = null;
-    this.workletMonitorTap = null;
     this.micGainNode = null;
     this.streamSource = null;
     this.vocalBusNode = null;

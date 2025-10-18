@@ -279,17 +279,6 @@
   box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.25);
 }
 
-.panel.meters .mic-monitor-control {
-  margin-top: 1.25rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.panel.meters .mic-monitor-control .tuning-slider {
-  background: rgba(255, 255, 255, 0.05);
-}
-
 .track-uploader form {
   display: flex;
   flex-direction: column;

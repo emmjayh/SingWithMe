@@ -4,7 +4,6 @@ import { LatencyBadge } from "@components/LatencyBadge";
 import { ModeToggle } from "@components/ModeToggle";
 import { CalibrationWizard } from "@components/CalibrationWizard";
 import { MetersPanel } from "@components/MetersPanel";
-import { MicMonitorControl } from "@components/MicMonitorControl";
 import { TrackUploader } from "@components/TrackUploader";
 import { TuningControls } from "@components/TuningControls";
 import { AndroidWaitlistForm } from "@components/AndroidWaitlistForm";
@@ -32,7 +31,6 @@ export default function Home() {
         <section className="panel meters">
           <h2>Signal</h2>
           <MetersPanel />
-          <MicMonitorControl />
         </section>
         <section className="panel confidence">
           <h2>Confidence</h2>

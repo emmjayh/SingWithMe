@@ -652,8 +652,6 @@ class AudioEngine {
     this.noiseFloorAmplitude = clamp(amplitude, 0, 0.6);
   }
 
-  private applyMicMonitorGain(gainDb: number) {
-    const clamped = clamp(gainDb, -60, 6);
   private applyMicMonitorGain(_: number) {
     this.micMonitorGainDb = -60;
     this.micMonitorLinear = 0;

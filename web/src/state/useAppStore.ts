@@ -94,9 +94,16 @@ export const useAppStore = create<AppState>((set) => ({
       guideUrl: defaultGuideUrl
     }),
   loadSampleTracks: () =>
-    set({
-      instrumentUrl: sampleInstrumentUrl,
-      guideUrl: sampleGuideUrl
+    set(() => {
+      const cacheBuster = Date.now();
+      const nextInstrument =
+        sampleInstrumentUrl != null ? `${sampleInstrumentUrl}?demo=${cacheBuster}` : sampleInstrumentUrl;
+      const nextGuide =
+        sampleGuideUrl != null ? `${sampleGuideUrl}?demo=${cacheBuster}` : sampleGuideUrl;
+      return {
+        instrumentUrl: nextInstrument,
+        guideUrl: nextGuide
+      };
     }),
   setNoiseFloor: (noiseFloor) => set({ noiseFloor }),
   setMicMonitorGainDb: (micMonitorGainDb) => set({ micMonitorGainDb }),

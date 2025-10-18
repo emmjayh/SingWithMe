@@ -1,4 +1,4 @@
-import * as ort from "onnxruntime-web";
+﻿import * as ort from "onnxruntime-web";
 import { shallow } from "zustand/shallow";
 import { ManualMode, useAppStore, CalibrationStage, PlaybackState } from "@state/useAppStore";
 import { resolveAssetUrl } from "@utils/assetPaths";
@@ -110,7 +110,7 @@ const defaultConfig: EngineConfig = {
     instrumentUrl: resolveAssetUrl(import.meta.env.VITE_INSTRUMENT_URL ?? "/media/braykit-instrument.mp3"),
     guideUrl: resolveAssetUrl(import.meta.env.VITE_GUIDE_URL ?? "/media/braykit-guide.mp3"),
     loop: true,
-    instrumentGainDb: 0,
+    micMonitorGainDb: -60,
     guideGainDb: 0,
     micMonitorGainDb: -6,
     playbackLeakCompensation: 0.6,
@@ -258,9 +258,8 @@ class AudioEngine {
     this.currentGain = this.gate.currentGainLinear();
     this.instrumentBaseGain = dbToLinear(this.config.media.instrumentGainDb ?? 0);
     this.guideBaseGain = dbToLinear(this.config.media.guideGainDb ?? 0);
-    this.micMonitorGainDb =
-      this.config.media.micMonitorGainDb ?? defaultConfig.media.micMonitorGainDb ?? -60;
-    this.micMonitorLinear = dbToLinear(this.micMonitorGainDb);
+    this.micMonitorGainDb = -60;
+    this.micMonitorLinear = 0;
     this.playbackLeakComp = clamp(this.config.media.playbackLeakCompensation ?? 0.6, 0, 1);
     this.adaptiveLeakComp = this.playbackLeakComp;
     this.crowdCancelAdaptRate = this.config.media.crowdCancelAdaptRate ?? 0.0005;
@@ -655,13 +654,13 @@ class AudioEngine {
 
   private applyMicMonitorGain(gainDb: number) {
     const clamped = clamp(gainDb, -60, 6);
-    this.micMonitorGainDb = clamped;
-    this.micMonitorLinear = clamped <= -59.9 ? 0 : dbToLinear(clamped);
+  private applyMicMonitorGain(_: number) {
+    this.micMonitorGainDb = -60;
+    this.micMonitorLinear = 0;
     if (this.audioContext && this.micGainNode) {
-      this.micGainNode.gain.setTargetAtTime(this.micMonitorLinear, this.audioContext.currentTime, 0.02);
+      this.micGainNode.gain.setTargetAtTime(0, this.audioContext.currentTime, 0.02);
     }
   }
-
   private applyCrowdCancelStrength(strength: number) {
     const clamped = clamp(strength, 0, 1);
     this.crowdCancelAdaptRate = 0.0001 + clamped * 0.0004;

@@ -384,18 +384,20 @@ class AudioEngine {
   private async loadMedia() {
     if (!this.audioContext) return;
 
-    const fetchBuffer = async (url: string | null): Promise<AudioBuffer | null> => {
+    const fetchBuffer = async (url: string | null, tag: string): Promise<AudioBuffer | null> => {
       if (!url) {
         return null;
       }
       try {
         const response = await fetch(url);
         if (!response.ok) {
+          console.warn(`[AudioEngine] Failed to fetch ${tag}`, url, response.status);
           return null;
         }
         const arrayBuffer = await response.arrayBuffer();
         return await this.audioContext!.decodeAudioData(arrayBuffer);
-      } catch {
+      } catch (error) {
+        console.warn(`[AudioEngine] decodeAudioData failed for ${tag}`, url, error);
         return null;
       }
     };
@@ -406,8 +408,8 @@ class AudioEngine {
     );
     const guideUrl = resolveAssetUrl(state.guideUrl ?? this.config.media.guideUrl ?? null);
 
-    this.instrumentBuffer = await fetchBuffer(instrumentUrl);
-    this.guideBuffer = await fetchBuffer(guideUrl);
+    this.instrumentBuffer = await fetchBuffer(instrumentUrl, "instrument");
+    this.guideBuffer = await fetchBuffer(guideUrl, "guide");
 
     this.instrumentChannels = [];
     if (this.instrumentBuffer) {
@@ -416,6 +418,9 @@ class AudioEngine {
       }
     }
     this.instrumentLength = this.instrumentBuffer?.length ?? 0;
+    if (!this.instrumentBuffer || this.instrumentLength === 0) {
+      console.warn("[AudioEngine] Instrument buffer missing or empty after load", instrumentUrl);
+    }
 
     this.guideChannels = [];
     if (this.guideBuffer) {
@@ -424,6 +429,9 @@ class AudioEngine {
       }
     }
     this.guideLength = this.guideBuffer?.length ?? 0;
+    if (!this.guideBuffer || this.guideLength === 0) {
+      console.warn("[AudioEngine] Guide buffer missing or empty after load", guideUrl);
+    }
     this.resetDynamicsState();
     this.playbackSampleCursor = 0;
 

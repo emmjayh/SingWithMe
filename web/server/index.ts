@@ -11,6 +11,8 @@ const port = process.env.PORT || 8080;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const distDir = path.resolve(__dirname, "..", "dist");
+const publicDir = path.resolve(__dirname, "..", "public");
+const mediaDir = path.join(publicDir, "media");
 const uploadDir = path.resolve(__dirname, "..", "uploads");
 const fulfillmentPath = process.env.FULFILLMENT_FILE_PATH
   ? path.resolve(process.env.FULFILLMENT_FILE_PATH)
@@ -48,6 +50,10 @@ const upload = multer({
   storage,
   limits: { fileSize: 60 * 1024 * 1024 }
 });
+
+if (fs.existsSync(mediaDir)) {
+  app.use("/media", express.static(mediaDir));
+}
 
 app.use(express.static(distDir));
 app.use("/uploads", express.static(uploadDir));

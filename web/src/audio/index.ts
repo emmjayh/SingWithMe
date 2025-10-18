@@ -80,9 +80,9 @@ interface EngineConfig {
   };
   gate: GateConfig;
   media: MediaConfig;
-  media: {
-    instrumentUrl: resolveAssetUrl(import.meta.env.VITE_INSTRUMENT_URL ?? "/media/demo-instrument.wav"),
-    guideUrl: resolveAssetUrl(import.meta.env.VITE_GUIDE_URL ?? "/media/demo-guide.wav"),
+  latencyTargetMs: number;
+}
+
 const defaultConfig: EngineConfig = {
   sampleRate: 48000,
   bufferSamples: 128,
@@ -109,9 +109,10 @@ const defaultConfig: EngineConfig = {
   media: {
     instrumentUrl: resolveAssetUrl(import.meta.env.VITE_INSTRUMENT_URL ?? "/media/demo-instrument.wav"),
     guideUrl: resolveAssetUrl(import.meta.env.VITE_GUIDE_URL ?? "/media/demo-guide.wav"),
-    micMonitorGainDb: -60,
-    guideGainDb: 0,
+    loop: true,
+    instrumentGainDb: 0,
     micMonitorGainDb: -6,
+    guideGainDb: 0,
     playbackLeakCompensation: 0.6,
     crowdCancelAdaptRate: 0.0005,
     crowdCancelRecoveryRate: 0.00005,
@@ -1605,4 +1606,6 @@ export const audioEngine = new AudioEngine();
 
 (window as any).audioEngine = audioEngine;
 
-
+    instrumentUrl: resolveAssetUrl(import.meta.env.VITE_INSTRUMENT_URL ?? "/media/demo-instrument.wav"),
+    guideUrl: resolveAssetUrl(import.meta.env.VITE_GUIDE_URL ?? "/media/demo-guide.wav"),
+    micMonitorGainDb: -60,

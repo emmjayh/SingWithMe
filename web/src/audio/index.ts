@@ -1,8 +1,7 @@
-import * as ort from "onnxruntime-web";
+﻿import * as ort from "onnxruntime-web";
 import { shallow } from "zustand/shallow";
 import { ManualMode, useAppStore, CalibrationStage, PlaybackState } from "@state/useAppStore";
 import { resolveAssetUrl } from "@utils/assetPaths";
-import { PitchShifter } from "soundtouchjs";
 import { ConfidenceGate, GateConfig, dbToLinear } from "./confidenceGate";
 import { Calibrator } from "./calibrator";
 import { TelemetryLog } from "./telemetry";
@@ -167,7 +166,7 @@ class AudioEngine {
   private instrumentGainNode: GainNode | null = null;
   private guideGainNode: GainNode | null = null;
   private vocalBusNode: GainNode | null = null;
-  private guidePitchShifter: PitchShifter | null = null;
+  private guideSourceNode: AudioBufferSourceNode | null = null;
   private instrumentBaseGain = 1;
   private guideBaseGain = 1;
   private instrumentChannels: Float32Array[] = [];
@@ -720,8 +719,8 @@ class AudioEngine {
     this.updateTimingCoefficients();
   }
 
-  private buildGuideChain(destination: AudioNode) {
-    if (!this.audioContext || !this.guidePitchShifter) {
+  private buildGuideChain(source: AudioNode, destination: AudioNode) {
+    if (!this.audioContext) {
       return;
     }
 
@@ -762,7 +761,7 @@ class AudioEngine {
     this.guideGainNode = ctx.createGain();
     this.guideGainNode.gain.value = 1;
 
-    this.guidePitchShifter.connect(this.guideLowShelfNode);
+    source.connect(this.guideLowShelfNode);
     this.guideLowShelfNode.connect(this.guideHighShelfNode);
     this.guideHighShelfNode.connect(this.guidePreGainNode);
 
@@ -778,6 +777,9 @@ class AudioEngine {
 
     this.guideSumNode.connect(this.guideGainNode);
     this.guideGainNode.connect(destination);
+    if (source instanceof AudioBufferSourceNode) {
+      this.guideSourceNode = source;
+    }
 
     this.applyGuideProcessing();
   }
@@ -802,6 +804,20 @@ class AudioEngine {
       } catch {
         /* ignore */
       }
+    }
+
+    if (this.guideSourceNode) {
+      try {
+        this.guideSourceNode.stop();
+      } catch {
+        /* ignore */
+      }
+      try {
+        this.guideSourceNode.disconnect();
+      } catch {
+        /* ignore */
+      }
+      this.guideSourceNode = null;
     }
 
     this.guideLowShelfNode = null;
@@ -909,29 +925,28 @@ class AudioEngine {
     }
 
     if (this.guideBuffer) {
-      const handleGuideEnd = () => {
-        if (this.config.media.loop) {
-          if (this.guidePitchShifter) {
-            this.guidePitchShifter.percentagePlayed = 0;
-          }
-        } else {
+      const guideSource = this.audioContext.createBufferSource();
+      guideSource.buffer = this.guideBuffer;
+      guideSource.loop = this.config.media.loop;
+      guideSource.onended = () => {
+        if (!this.config.media.loop) {
           this.stop();
         }
       };
 
-      this.guidePitchShifter = new PitchShifter(this.audioContext, this.guideBuffer, undefined, handleGuideEnd);
-      this.currentPitchRatio = 1;
-      this.guidePitchShifter.pitch = this.currentPitchRatio;
-      this.guidePitchShifter.rate = 1;
-      this.guidePitchShifter.tempo = 1;
+      const guideSink = this.vocalBusNode ?? this.audioContext.destination;
+      this.buildGuideChain(guideSource, guideSink);
 
       if (guideDuration > 0) {
-        const normalized = Math.max(0, Math.min(1, normalizedGuideOffset / guideDuration));
-        this.guidePitchShifter.percentagePlayed = normalized;
+        const normalizedOffset = Math.max(0, Math.min(guideDuration, normalizedGuideOffset));
+        try {
+          guideSource.start(0, normalizedOffset);
+        } catch {
+          guideSource.start();
+        }
+      } else {
+        guideSource.start();
       }
-
-      const guideSink: AudioNode = this.vocalBusNode ?? this.audioContext.destination;
-      this.buildGuideChain(guideSink);
     }
   }
 
@@ -951,10 +966,6 @@ class AudioEngine {
     }
 
     this.teardownGuideChain();
-    if (this.guidePitchShifter) {
-      this.guidePitchShifter.disconnect();
-      this.guidePitchShifter = null;
-    }
     this.currentPitchRatio = 1;
     this.resetDynamicsState();
   }
@@ -1308,12 +1319,6 @@ class AudioEngine {
 
     this.updateGuideEnvelope(frameMax, playing);
 
-    if (this.guidePitchShifter) {
-      const playbackTime = this.getPlaybackPositionSeconds();
-      const ratio = this.computeGuidePitchRatio(playbackTime) ?? 1;
-      const smoothing = 0.1;
-      this.currentPitchRatio += (ratio - this.currentPitchRatio) * smoothing;
-      this.guidePitchShifter.pitch = this.currentPitchRatio;
     }
 
     this.telemetry.record({

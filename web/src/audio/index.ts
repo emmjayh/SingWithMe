@@ -1,4 +1,4 @@
-﻿import * as ort from "onnxruntime-web";
+import * as ort from "onnxruntime-web";
 import { shallow } from "zustand/shallow";
 import { ManualMode, useAppStore, CalibrationStage, PlaybackState } from "@state/useAppStore";
 import { resolveAssetUrl } from "@utils/assetPaths";
@@ -107,8 +107,8 @@ const defaultConfig: EngineConfig = {
     duckDb: -18
   },
   media: {
-    instrumentUrl: resolveAssetUrl(import.meta.env.VITE_INSTRUMENT_URL ?? "/media/I light up the dark like a ghost with a  (Cover) (Instrumental).mp3"),
-    guideUrl: resolveAssetUrl(import.meta.env.VITE_GUIDE_URL ?? "/media/I light up the dark like a ghost with a  (Cover) (Vocals).mp3"),
+    instrumentUrl: resolveAssetUrl(import.meta.env.VITE_INSTRUMENT_URL ?? "/media/light-ghost-instrument.wav"),
+    guideUrl: resolveAssetUrl(import.meta.env.VITE_GUIDE_URL ?? "/media/light-ghost-guide.wav"),
     loop: true,
     instrumentGainDb: 0,
     micMonitorGainDb: -6,

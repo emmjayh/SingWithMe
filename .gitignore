@@ -12,3 +12,5 @@ android/signing/
 *.keystore
 
 
+!web/public/media/light-ghost-instrument.wav
+!web/public/media/light-ghost-guide.wav

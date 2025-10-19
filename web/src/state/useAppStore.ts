@@ -18,18 +18,18 @@ export interface TrackUrls {
 const defaultInstrumentUrl =
   resolveAssetUrl(
     import.meta.env.VITE_INSTRUMENT_URL ??
-      "/media/I light up the dark like a ghost with a  (Cover) (Instrumental).mp3"
+      "/media/light-ghost-instrument.wav"
   )!;
 const defaultGuideUrl =
   resolveAssetUrl(
     import.meta.env.VITE_GUIDE_URL ??
-      "/media/I light up the dark like a ghost with a  (Cover) (Vocals).mp3"
+      "/media/light-ghost-guide.wav"
   )!;
 const sampleInstrumentUrl = resolveAssetUrl(
-  "/media/I light up the dark like a ghost with a  (Cover) (Instrumental).mp3"
+  "/media/light-ghost-instrument.wav"
 )!;
 const sampleGuideUrl = resolveAssetUrl(
-  "/media/I light up the dark like a ghost with a  (Cover) (Vocals).mp3"
+  "/media/light-ghost-guide.wav"
 )!;
 
 interface AppState {

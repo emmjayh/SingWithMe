@@ -1,3 +1,4 @@
+import { Pool } from "pg";
 import nodemailer from "nodemailer";
 import express from "express";
 import path from "path";
@@ -36,6 +37,28 @@ const smtpPassword = process.env.SMTP_PASSWORD;
 const smtpSecure = (process.env.SMTP_SECURE ?? "").toLowerCase() === "true" || smtpPort === 465;
 
 let mailer: nodemailer.Transporter | null = null;
+const databaseUrl = process.env.DATABASE_URL;
+const databaseSsl = (process.env.DATABASE_SSL ?? "").toLowerCase() === "true";
+let dbPool: Pool | null = null;
+let dbReady: Promise<void> | null = null;
+if (databaseUrl) {
+  dbPool = new Pool({
+    connectionString: databaseUrl,
+    ssl: databaseSsl ? { rejectUnauthorized: false } : undefined
+  });
+  dbReady = dbPool.query(`
+    CREATE TABLE IF NOT EXISTS waitlist_signups (
+      id SERIAL PRIMARY KEY,
+      email TEXT UNIQUE NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `).then(() => undefined).catch((error) => {
+    console.error("Failed to initialize waitlist table", error);
+    dbPool?.end().catch(() => undefined);
+    dbPool = null;
+  });
+}
+
 try {
   if (smtpUrl) {
     mailer = nodemailer.createTransport(smtpUrl);
@@ -177,32 +200,57 @@ app.post("/api/waitlist", async (req, res) => {
   if (!email) {
     return res.status(400).json({ error: "Email address is required." });
   }
-  if (!mailer) {
-    return res.status(500).json({ error: "Waitlist email is not configured." });
+
+  if (dbReady) {
+    await dbReady.catch((error) => {
+      console.error("Waitlist table initialization failed", error);
+    });
   }
-  const to = process.env.WAITLIST_TO_EMAIL;
-  if (!to) {
-    return res.status(500).json({ error: "WAITLIST_TO_EMAIL is not configured on the server." });
+  if (!dbPool) {
+    return res.status(500).json({ error: "Waitlist database is not configured." });
   }
-  const from = process.env.WAITLIST_FROM_EMAIL ?? to;
-  const subject = process.env.WAITLIST_SUBJECT ?? "Android waitlist signup";
-  const text = `New Android waitlist signup:
+
+  let storedAt: string | null = null;
+  try {
+    const result = await dbPool.query(
+      `INSERT INTO waitlist_signups (email) VALUES ($1)
+       ON CONFLICT (email) DO UPDATE SET created_at = NOW()
+       RETURNING created_at`,
+      [email]
+    );
+    storedAt = result.rows[0]?.created_at ? new Date(result.rows[0].created_at).toISOString() : null;
+  } catch (error) {
+    console.error("Failed to store waitlist email", error);
+    return res.status(500).json({ error: "Unable to store waitlist email." });
+  }
+
+  let emailSent = false;
+  if (mailer) {
+    const to = process.env.WAITLIST_TO_EMAIL;
+    if (!to) {
+      return res.status(500).json({ error: "WAITLIST_TO_EMAIL is not configured on the server." });
+    }
+    const from = process.env.WAITLIST_FROM_EMAIL ?? to;
+    const subject = process.env.WAITLIST_SUBJECT ?? "Android waitlist signup";
+    const body = `New Android waitlist signup:
 
 Email: ${email}
 Received: ${new Date().toISOString()}`;
-  try {
-    await mailer.sendMail({
-      from,
-      to,
-      replyTo: email,
-      subject,
-      text
-    });
-    return res.status(200).json({ ok: true });
-  } catch (error) {
-    console.error("Failed to send waitlist email", error);
-    return res.status(500).json({ error: "Unable to send waitlist email." });
+    try {
+      await mailer.sendMail({
+        from,
+        to,
+        replyTo: email,
+        subject,
+        text: body
+      });
+      emailSent = true;
+    } catch (error) {
+      console.error("Failed to send waitlist email", error);
+    }
   }
+
+  return res.status(200).json({ ok: true, storedAt, emailSent });
 });
 
 app.post("/api/tracks", upload.fields([

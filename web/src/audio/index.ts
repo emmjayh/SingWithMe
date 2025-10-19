@@ -1,4 +1,4 @@
-﻿import * as ort from "onnxruntime-web";
+import * as ort from "onnxruntime-web";
 import { shallow } from "zustand/shallow";
 import { ManualMode, useAppStore, CalibrationStage, PlaybackState } from "@state/useAppStore";
 import { resolveAssetUrl } from "@utils/assetPaths";
@@ -1318,8 +1318,6 @@ class AudioEngine {
     this.updateConfidence(rms);
 
     this.updateGuideEnvelope(frameMax, playing);
-
-    }
 
     this.telemetry.record({
       timestamp: performance.now(),

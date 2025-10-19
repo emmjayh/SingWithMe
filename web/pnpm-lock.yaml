@@ -11,6 +11,9 @@ dependencies:
   multer:
     specifier: ^2.0.2
     version: 2.0.2
+  nodemailer:
+    specifier: ^6.10.1
+    version: 6.10.1
   onnxruntime-web:
     specifier: ^1.18.0
     version: 1.23.0
@@ -20,9 +23,9 @@ dependencies:
   react-dom:
     specifier: ^18.3.1
     version: 18.3.1(react@18.3.1)
-  soundtouchjs:
-    specifier: ^0.2.1
-    version: 0.2.1
+  stripe:
+    specifier: ^16.6.0
+    version: 16.12.0
   zustand:
     specifier: ^4.5.4
     version: 4.5.7(@types/react@18.3.26)(react@18.3.1)
@@ -2182,6 +2185,11 @@ packages:
     resolution: {integrity: sha512-cCmFDMSm26S6tQSDpBCg/NR8NENrVPhAJSf+XbxBG4rPFaaonlEoE9wHQmun+cls499TQGSb7ZyPBRlzgKfpeg==}
     dev: true
 
+  /nodemailer@6.10.1:
+    resolution: {integrity: sha512-Z+iLaBGVaSjbIzQ4pX6XV41HrooLsQ10ZWPUehGmuantvzWoDVBnmsdUcOIDM1t+yPor5pDhVlDESgOMEGxhHA==}
+    engines: {node: '>=6.0.0'}
+    dev: false
+
   /normalize-path@3.0.0:
     resolution: {integrity: sha512-6eZs5Ls3WtCisHWp9S2GUy8dqkpGi4BVSz3GaqiE6ezub0512ESztXUwUB6C6IKbQkY2Pnb/mD4WYojCRwcwLA==}
     engines: {node: '>=0.10.0'}
@@ -2692,10 +2700,6 @@ packages:
     engines: {node: '>=14'}
     dev: true
 
-  /soundtouchjs@0.2.1:
-    resolution: {integrity: sha512-ApYdqT4bHqvm6QTRzHDta8PzJIgLacaXdkzUnSdotHvk7N2Ugr9JqV3SlWYsFTsd4ceJHEJqT7JI5E2MYmuQ6w==}
-    dev: false
-
   /source-map-js@1.2.1:
     resolution: {integrity: sha512-UXWMKhLOwVKb728IUtQPXxfYU+usdybtUrK/8uGE8CQMvrhOpwvzDBwj0QhSL7MQc7vIsISBG8VQ8+IDQxpfQA==}
     engines: {node: '>=0.10.0'}
@@ -2753,6 +2757,14 @@ packages:
     resolution: {integrity: sha512-6fPc+R4ihwqP6N/aIv2f1gMH8lOVtWQHoqC4yK6oSDVVocumAsfCqjkXnqiYMhmMwS/mEHLp7Vehlt3ql6lEig==}
     engines: {node: '>=8'}
     dev: true
+
+  /stripe@16.12.0:
+    resolution: {integrity: sha512-H7eFVLDxeTNNSn4JTRfL2//LzCbDrMSZ+2q1c7CanVWgK2qIW5TwS+0V7N9KcKZZNpYh/uCqK0PyZh/2UsaAtQ==}
+    engines: {node: '>=12.*'}
+    dependencies:
+      '@types/node': 20.19.21
+      qs: 6.13.0
+    dev: false
 
   /sucrase@3.35.0:
     resolution: {integrity: sha512-8EbVDiu9iN/nESwxeSxDKe0dunta1GOlHufmSSXxMD2z2/tMZpDMpvXQGsc+ajGo8y2uYUmixaSRUc/QPoQ0GA==}

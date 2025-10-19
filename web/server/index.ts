@@ -1,3 +1,4 @@
+import nodemailer from "nodemailer";
 import express from "express";
 import path from "path";
 import multer from "multer";
@@ -27,11 +28,42 @@ const stripe = stripeSecret
   })
   : null;
 
+const smtpUrl = process.env.SMTP_URL;
+const smtpHost = process.env.SMTP_HOST;
+const smtpPort = Number(process.env.SMTP_PORT ?? 587);
+const smtpUser = process.env.SMTP_USER;
+const smtpPassword = process.env.SMTP_PASSWORD;
+const smtpSecure = (process.env.SMTP_SECURE ?? "").toLowerCase() === "true" || smtpPort === 465;
+
+let mailer: nodemailer.Transporter | null = null;
+try {
+  if (smtpUrl) {
+    mailer = nodemailer.createTransport(smtpUrl);
+  } else if (smtpHost) {
+    mailer = nodemailer.createTransport({
+      host: smtpHost,
+      port: smtpPort,
+      secure: smtpSecure,
+      auth: smtpUser && smtpPassword ? { user: smtpUser, pass: smtpPassword } : undefined
+    });
+  }
+  if (mailer) {
+    mailer.verify().catch((error) => {
+      console.warn("SMTP transporter verification failed", error);
+    });
+  }
+} catch (error) {
+  console.warn("Failed to configure SMTP transporter", error);
+  mailer = null;
+}
+
 fs.mkdirSync(uploadDir, { recursive: true });
 if (fulfillmentPath && !fs.existsSync(fulfillmentPath)) {
   // eslint-disable-next-line no-console
   console.warn(`Fulfillment file not found at ${fulfillmentPath}. Download endpoint will error until it is provided.`);
 }
+
+app.use(express.json());
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, uploadDir),
@@ -138,6 +170,39 @@ app.get("/api/download/:token", (req, res) => {
       res.status(500).end();
     }
   });
+});
+
+app.post("/api/waitlist", async (req, res) => {
+  const email = typeof req.body?.email === "string" ? req.body.email.trim() : "";
+  if (!email) {
+    return res.status(400).json({ error: "Email address is required." });
+  }
+  if (!mailer) {
+    return res.status(500).json({ error: "Waitlist email is not configured." });
+  }
+  const to = process.env.WAITLIST_TO_EMAIL;
+  if (!to) {
+    return res.status(500).json({ error: "WAITLIST_TO_EMAIL is not configured on the server." });
+  }
+  const from = process.env.WAITLIST_FROM_EMAIL ?? to;
+  const subject = process.env.WAITLIST_SUBJECT ?? "Android waitlist signup";
+  const text = `New Android waitlist signup:
+
+Email: ${email}
+Received: ${new Date().toISOString()}`;
+  try {
+    await mailer.sendMail({
+      from,
+      to,
+      replyTo: email,
+      subject,
+      text
+    });
+    return res.status(200).json({ ok: true });
+  } catch (error) {
+    console.error("Failed to send waitlist email", error);
+    return res.status(500).json({ error: "Unable to send waitlist email." });
+  }
 });
 
 app.post("/api/tracks", upload.fields([

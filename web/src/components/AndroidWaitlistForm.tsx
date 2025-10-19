@@ -2,8 +2,6 @@ import { FormEvent, useMemo, useState } from "react";
 
 type Status = "idle" | "submitting" | "success" | "error";
 
-const DEFAULT_MAILTO = "mailto:LocalHealthApp@gmail.com";
-
 function isValidEmail(value: string) {
   return /\S+@\S+\.\S+/.test(value);
 }
@@ -15,21 +13,11 @@ export function AndroidWaitlistForm() {
 
   const endpoint = useMemo(() => {
     const raw = import.meta.env.VITE_ANDROID_WAITLIST_URL;
-    if (typeof raw !== "string") {
-      return "";
+    if (typeof raw === "string" && raw.trim().length > 0) {
+      return raw.trim();
     }
-    return raw.trim();
+    return "/api/waitlist";
   }, []);
-
-  const fallbackMailto = useMemo(() => {
-    const raw = import.meta.env.VITE_ANDROID_WAITLIST_MAILTO;
-    if (typeof raw !== "string" || raw.trim().length === 0) {
-      return DEFAULT_MAILTO;
-    }
-    return raw.trim();
-  }, []);
-
-  const useMailto = endpoint.length === 0;
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -38,16 +26,6 @@ export function AndroidWaitlistForm() {
     if (!isValidEmail(trimmed)) {
       setStatus("error");
       setMessage("Enter a valid email address.");
-      return;
-    }
-
-    if (useMailto) {
-      const subject = encodeURIComponent("TuneTrix Android beta waitlist");
-      const body = encodeURIComponent(`Email: ${trimmed}`);
-      window.location.href = `${fallbackMailto}?subject=${subject}&body=${body}`;
-      setStatus("success");
-      setMessage("Thanks! Check your email for a confirmation.");
-      setEmail("");
       return;
     }
 
@@ -74,7 +52,7 @@ export function AndroidWaitlistForm() {
       }
 
       setStatus("success");
-      setMessage("Thanks! You're on the list - watch your inbox for the invite.");
+      setMessage("Thanks! You're on the list—we'll reach out soon.");
       setEmail("");
     } catch (error) {
       setStatus("error");
@@ -115,4 +93,3 @@ export function AndroidWaitlistForm() {
     </form>
   );
 }
-
